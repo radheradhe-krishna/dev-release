@@ -58,7 +58,7 @@ def create_issue_from_jira():
     jira_issue_key = os.getenv("JIRA_ISSUE_KEY")
     jira_summary = os.getenv("JIRA_SUMMARY")
     dry_run = os.getenv("DRY_RUN", "false").lower() == "true"
-    labels = args.label or os.environ.get("LABEL")
+    # labels = args.label or os.environ.get("LABEL")
 
     if not jira_issue_key:
         print("Error: JIRA_ISSUE_KEY environment variable not set")
@@ -92,7 +92,7 @@ def create_issue_from_jira():
     assignees = [part.strip() for part in assignees_env.split(",") if part.strip()]
     
     # Default label for vulnerability
-    # labels = ["vulnerability"]
+    labels = ["jira-issue"]
     
     body = render_issue_from_jira(
         jira_issue_key=jira_issue_key,
