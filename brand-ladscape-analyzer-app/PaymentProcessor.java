@@ -17,10 +17,10 @@ public class PaymentProcessor {
     }
 
     public void processPayment(String paymentType) {
-        // Another vulnerable pattern
-        if (paymentType == "credit") {
+        // Fixed: Using proper string comparison with Objects.equals
+        if (Objects.equals(paymentType, "credit")) {
             System.out.println("Processing credit payment.");
-        } else if (paymentType == "debit") {
+        } else if (Objects.equals(paymentType, "debit")) {
             System.out.println("Processing debit payment.");
         } else {
             System.out.println("Unsupported payment type.");
