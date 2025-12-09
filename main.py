@@ -52,30 +52,14 @@ def validate_assignees(repo, gh, assignees):
         print(f"Warning: These assignees are not assignable and will be skipped: {invalid}")
     return valid
 
-def upload_image_to_issue(repo, issue, image_path):
-    """Upload image as an issue comment with embedded image"""
-    filename = os.path.basename(image_path)
-    
-    # Read image and create comment with image
-    # GitHub will host the image when you add it to a comment
-    with open(image_path, 'rb') as f:
-        # You can upload via issue.create_comment() with drag-drop simulation
-        # Or use the simpler approach: reference local path and let GitHub handle it
-        pass
-    
-    # Alternative: Upload to a release asset or gist and get URL
-    # For now, we'll just reference the filename
-    return filename
-    
 def create_issue_from_jira():
-    """Create a GitHub issue from Jira environment variables."""
+    """Create a GitHub issue from Jira environment variables, and embed attachments as images in the issue body."""
     load_dotenv()
     
     jira_issue_key = os.getenv("JIRA_ISSUE_KEY")
     jira_summary = os.getenv("JIRA_SUMMARY")
     jira_attachments = os.getenv("JIRA_ATTACHMENTS", "")
     dry_run = os.getenv("DRY_RUN", "false").lower() == "true"
-    # labels = os.getenv("LABEL")
 
     if not jira_issue_key:
         print("Error: JIRA_ISSUE_KEY environment variable not set")
@@ -116,59 +100,60 @@ def create_issue_from_jira():
         jira_summary=jira_summary
     )
     
-    # Add attachment section if attachments exist
+    # Gather attachments discovered on runner
     attachment_files = []
     downloaded = []
     if jira_attachments:
         body += "\n\n## 📎 Attachments from Jira\n"
-        
-        # Parse attachment filenames
         for attach in jira_attachments.split(","):
             if ":" in attach:
                 filename = attach.split(":")[0]
                 attachment_files.append(filename)
-        
-        # List downloaded files
         downloaded = glob.glob("attachments/*")
         for filepath in downloaded:
             filename = os.path.basename(filepath)
-            body += f"- 🖼️ `{filename}` (see comment below)\n"
-    
-    # Create the issue
+            body += f"- 🖼️ `{filename}` (image embedded below)\n"
+
+    # Simple & reliable approach: upload attachment files into the repo and embed the raw URLs in the issue body
+    # NOTE: This commits files to the repository's default branch. If you don't want that, choose a different storage (releases, S3, etc).
+    if downloaded:
+        for filepath in downloaded:
+            filename = os.path.basename(filepath)
+            target_path = f"issue-attachments/{jira_issue_key}/{filename}"
+            try:
+                # read as binary then decode latin-1 so PyGithub will accept content string
+                with open(filepath, "rb") as fh:
+                    content_bytes = fh.read()
+                content_str = content_bytes.decode("latin-1")
+                commit_msg = f"Add attachment {filename} for Jira {jira_issue_key}"
+                try:
+                    repo.create_file(target_path, commit_msg, content_str, branch=repo.default_branch)
+                    print(f"Uploaded {filename} to repo at {target_path}")
+                except Exception as exc:
+                    # If file already exists or any other issue, we won't fail — we will still try to reference the file
+                    print(f"Could not create file {target_path}: {exc} (continuing and attempting to reference existing file)")
+                raw_url = f"https://raw.githubusercontent.com/{repo.full_name}/{repo.default_branch}/{target_path}"
+                # Append an embedded image link to the issue body so Copilot and other tools can see it
+                body += f"\n\n![{filename}]({raw_url})"
+            except Exception as exc:
+                print(f"Warning: failed to read or upload attachment {filepath}: {exc}")
+                # Still include the local path note so humans can find it if needed
+                body += f"\n\n**Attachment (local):** `{filepath}` (failed to upload: {exc})"
+
+    # Create the issue via PyGithub (we pass repo_obj so create_issue_with_gh returns an Issue object when possible)
     created = create_issue_with_gh(
         title=title,
         body=body,
         assignees=assignees,
         labels=labels,
+        gh_token=token,
+        repo_obj=repo,
     )
 
-    if created:
-        print(f"\nSuccessfully created issue for {jira_issue_key}")
-
-        # If attachments exist, add them as comments
-        if jira_attachments and downloaded:
-            try:
-                # Try to find the created issue by title among open issues
-                issue = None
-                for i in repo.get_issues(state='open'):
-                    if i.title == title:
-                        issue = i
-                        break
-                # Fallback to the most recently opened issue if we didn't find a title match
-                if issue is None:
-                    issues = list(repo.get_issues(state='open'))
-                    issue = issues[0] if issues else None
-
-                if issue:
-                    for filepath in downloaded:
-                        filename = os.path.basename(filepath)
-                        comment_body = f"**Attachment:** `{filename}`\n\n"
-                        comment_body += f"_Downloaded from Jira. File saved at: `{filepath}`_"
-                        issue.create_comment(comment_body)
-                else:
-                    print("Warning: could not find the newly created issue to attach files as comments.")
-            except Exception as exc:
-                print(f"Warning: failed to add attachment comments: {exc}")
+    if created and hasattr(created, "number"):
+        print(f"\nSuccessfully created issue for {jira_issue_key} (#{created.number})")
+    elif created:
+        print(f"\nSuccessfully created issue for {jira_issue_key} (created via gh CLI)")
     else:
         print(f"\n❌ Failed to create issue for {jira_issue_key}")
         sys.exit(1)
@@ -223,6 +208,8 @@ def main():
             body=render_issue(vuln),
             assignees=assignees,
             labels=labels,
+            gh_token=os.getenv("GH_PAT_AGENT"),
+            repo_obj=repo,
         ):
             created += 1
 
