@@ -1,5 +1,5 @@
-import os
 import subprocess
+import re
 from typing import List, Sequence, Optional, Union
 import pandas as pd
 
@@ -57,18 +57,30 @@ def create_issue_with_gh(
     # Try PyGithub path if repo_obj is provided (preferred for programmatic access)
     if repo_obj is not None and Github is not None:
         try:
+            # Normalize assignees into either None or a list[str] with no empty values
+            normalized_assignees = None
+            if assignees:
+                if isinstance(assignees, (list, tuple)):
+                    normalized_assignees = [str(a).strip() for a in assignees if a is not None and str(a).strip() != ""]
+                else:
+                    # single scalar value
+                    normalized_assignees = [str(assignees).strip()] if str(assignees).strip() != "" else None
+                if normalized_assignees == []:
+                    normalized_assignees = None
+
+            print(f"Attempting PyGithub create_issue: title={title!r}, assignees={normalized_assignees}, labels={labels}")
             issue = repo_obj.create_issue(
                 title=title,
                 body=body,
-                assignees=assignees or None,
+                assignees=normalized_assignees,
                 labels=list(labels) if labels else None,
             )
             print(f"Created issue via PyGithub: {title} (#{issue.number})")
             return issue
-        except Exception as exc:
-            # Print full traceback information for debugging
+        except Exception:
+            # Print full traceback for debugging
             import traceback
-            print("Failed to create issue via PyGithub:")
+            print("Failed to create issue via PyGithub (traceback follows):")
             traceback.print_exc()
             # fall through to CLI fallback
 
@@ -77,9 +89,16 @@ def create_issue_with_gh(
     if auth_check.returncode != 0:
         print("gh CLI not authenticated. Ensure 'gh auth login --with-token' was run.")
         return False
+
     cmd = ["gh", "issue", "create", "--title", title, "--body", body]
     if assignees:
-        cmd += ["--assignee", ",".join(assignees)]
+        # ensure assignees passed to gh are comma-separated string
+        if isinstance(assignees, (list, tuple)):
+            assignee_arg = ",".join([str(a).strip() for a in assignees if a is not None and str(a).strip() != ""])
+        else:
+            assignee_arg = str(assignees).strip()
+        if assignee_arg:
+            cmd += ["--assignee", assignee_arg]
     if labels:
         for label in labels:
             cmd += ["--label", label]
