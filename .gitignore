@@ -45,3 +45,6 @@ tmp/
 
 # Generated Excel files (can be recreated with create_sample_excel.py)
 vulnerabilities-issues.xlsx
+
+# Java
+*.class
