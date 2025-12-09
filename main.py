@@ -2,6 +2,7 @@
 import argparse
 import os
 import sys
+import glob
 from dotenv import load_dotenv
 from github import Github
 from github.GithubException import GithubException
@@ -116,11 +117,12 @@ def create_issue_from_jira():
     )
     
     # Add attachment section if attachments exist
+    attachment_files = []
+    downloaded = []
     if jira_attachments:
         body += "\n\n## 📎 Attachments from Jira\n"
         
         # Parse attachment filenames
-        attachment_files = []
         for attach in jira_attachments.split(","):
             if ":" in attach:
                 filename = attach.split(":")[0]
@@ -132,32 +134,43 @@ def create_issue_from_jira():
             filename = os.path.basename(filepath)
             body += f"- 🖼️ `{filename}` (see comment below)\n"
     
-    title = f"[Security] {jira_summary} - {jira_issue_key}"
-    
-    if create_issue_with_gh(
+    # Create the issue
+    created = create_issue_with_gh(
         title=title,
         body=body,
         assignees=assignees,
         labels=labels,
-    ):
+    )
+
+    if created:
         print(f"\nSuccessfully created issue for {jira_issue_key}")
 
-     # If attachments exist, add them as comments
+        # If attachments exist, add them as comments
         if jira_attachments and downloaded:
-            issue = repo.get_issues(state='open')[0]  # Get the just-created issue
-            
-            for filepath in downloaded:
-                filename = os.path.basename(filepath)
-                # Note: PyGithub doesn't support direct image upload
-                # You need to use GitHub's web interface or a workaround
-                comment_body = f"**Attachment:** `{filename}`\n\n"
-                comment_body += f"_Downloaded from Jira. File saved at: `{filepath}`_"
-                issue.create_comment(comment_body)
+            try:
+                # Try to find the created issue by title among open issues
+                issue = None
+                for i in repo.get_issues(state='open'):
+                    if i.title == title:
+                        issue = i
+                        break
+                # Fallback to the most recently opened issue if we didn't find a title match
+                if issue is None:
+                    issues = list(repo.get_issues(state='open'))
+                    issue = issues[0] if issues else None
+
+                if issue:
+                    for filepath in downloaded:
+                        filename = os.path.basename(filepath)
+                        comment_body = f"**Attachment:** `{filename}`\n\n"
+                        comment_body += f"_Downloaded from Jira. File saved at: `{filepath}`_"
+                        issue.create_comment(comment_body)
+                else:
+                    print("Warning: could not find the newly created issue to attach files as comments.")
+            except Exception as exc:
+                print(f"Warning: failed to add attachment comments: {exc}")
     else:
         print(f"\n❌ Failed to create issue for {jira_issue_key}")
-        sys.exit(1)
-    else:
-        print(f"\nFailed to create issue for {jira_issue_key}")
         sys.exit(1)
 
 def main():
