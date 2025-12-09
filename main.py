@@ -54,7 +54,105 @@ def validate_assignees(repo, gh, assignees):
     if invalid:
         print(f"Warning: These assignees are not assignable and will be skipped: {invalid}")
     return valid
-    
+
+def upload_attachment_to_repo_and_comment(repo, issue, filepath, jira_key):
+    """
+    Upload a local file to a dedicated attachments branch and post a comment with the raw URL.
+
+    Behavior:
+      - branch: issue-attachments/<jira_key>
+      - file path on that branch: attachments/<jira_key>/<filename>
+      - after upload, posts a comment on the issue embedding the image via raw.githubusercontent.com
+    Returns True on success, False on failure (but never raises).
+    """
+    import time
+    from github import GithubException
+
+    filename = os.path.basename(filepath)
+    branch_name = f"issue-attachments/{jira_key}"
+    target_path = f"attachments/{jira_key}/{filename}"
+
+    try:
+        # 1) Ensure branch exists; if not, create it from default branch
+        try:
+            repo.get_branch(branch_name)
+            print(f"Branch {branch_name} already exists.")
+        except GithubException as exc:
+            if getattr(exc, "status", None) == 404:
+                print(f"Creating branch {branch_name} from default branch '{repo.default_branch}'")
+                default_branch = repo.get_branch(repo.default_branch)
+                sha = default_branch.commit.sha
+                ref = f"refs/heads/{branch_name}"
+                try:
+                    repo.create_git_ref(ref, sha)
+                    print(f"Created branch {branch_name}")
+                    # give GitHub a moment to settle the new ref
+                    time.sleep(1)
+                except Exception as e_ref:
+                    print(f"Failed to create branch {branch_name}: {e_ref}")
+                    raise
+            else:
+                print(f"Error checking branch {branch_name}: {exc}")
+                raise
+
+        # 2) Read local file bytes
+        try:
+            with open(filepath, "rb") as fh:
+                content_bytes = fh.read()
+            # PyGithub create_file/update_file expects a string for content; decode latin-1 preserves bytes
+            content_str = content_bytes.decode("latin-1")
+        except Exception as e_read:
+            print(f"Failed to read {filepath}: {e_read}")
+            try:
+                issue.create_comment(f"**Attachment failed to read:** `{filename}` — saved on runner at `{filepath}` (read error: {e_read})")
+            except Exception:
+                pass
+            return False
+
+        # 3) Create or update file on the attachments branch
+        try:
+            try:
+                existing_file = repo.get_contents(target_path, ref=branch_name)
+                # update existing file
+                commit_msg = f"Update attachment {filename} for issue {issue.number}"
+                repo.update_file(existing_file.path, commit_msg, content_str, existing_file.sha, branch=branch_name)
+                print(f"Updated existing file at {target_path} on branch {branch_name}")
+            except GithubException as not_found_exc:
+                if getattr(not_found_exc, "status", None) == 404:
+                    # create new file
+                    commit_msg = f"Add attachment {filename} for issue {issue.number}"
+                    repo.create_file(target_path, commit_msg, content_str, branch=branch_name)
+                    print(f"Created file at {target_path} on branch {branch_name}")
+                else:
+                    print(f"Error checking/creating file {target_path}: {not_found_exc}")
+                    raise
+        except Exception as e_create:
+            print(f"Failed to create/update file {target_path} on branch {branch_name}: {e_create}")
+            try:
+                issue.create_comment(f"**Attachment:** `{filename}` (failed to upload to repo: {e_create}). Local path: `{filepath}`")
+            except Exception:
+                pass
+            return False
+
+        # 4) Build raw URL and post comment with embedded image
+        raw_url = f"https://raw.githubusercontent.com/{repo.full_name}/{branch_name}/{target_path}"
+        comment_body = f"**Attachment:** `{filename}`\n\n![{filename}]({raw_url})"
+        try:
+            issue.create_comment(comment_body)
+            print(f"Posted comment with attachment {filename} linking to {raw_url}")
+            return True
+        except Exception as e_comment:
+            print(f"Failed to post comment for {filename}: {e_comment}")
+            return False
+
+    except Exception as exc_outer:
+        print(f"Unexpected error uploading attachment {filepath}: {exc_outer}")
+        try:
+            issue.create_comment(f"**Attachment:** `{filename}` (unexpected failure: {exc_outer})")
+        except Exception:
+            pass
+        return False
+
 def upload_file_via_api(token: str, owner: str, repo: str, path: str, content_bytes: bytes, branch: str = "main", commit_msg: str = "Add attachment") -> bool:
     """
     Upload file to repo via GitHub REST API PUT /repos/{owner}/{repo}/contents/{path}
@@ -179,13 +277,28 @@ def create_issue_from_jira():
         repo_obj=repo,
     )
 
+ # Resolve an Issue object no matter which path succeeded:
+    issue_obj = None
     if created and hasattr(created, "number"):
-        print(f"\nSuccessfully created issue for {jira_issue_key} (#{created.number})")
-    elif created:
-        print(f"\nSuccessfully created issue for {jira_issue_key} (created via gh CLI)")
+        # PyGithub returned an Issue object
+        issue_obj = created
+    elif isinstance(created, str):
+        # gh CLI returned a URL string; parse issue number and fetch Issue via PyGithub
+        m = re.search(r"/issues/(\d+)", created)
+        if m:
+            issue_number = int(m.group(1))
+            try:
+                issue_obj = repo.get_issue(issue_number)
+            except Exception as exc:
+                print(f"Warning: could not fetch issue #{issue_number} via PyGithub: {exc}")
+
+    if issue_obj:
+        print(f"Attaching {len(downloaded)} file(s) to issue #{issue_obj.number}")
+        for filepath in downloaded:
+            # call the helper you added
+            upload_attachment_to_repo_and_comment(repo, issue_obj, filepath, jira_issue_key)
     else:
-        print(f"\n❌ Failed to create issue for {jira_issue_key}")
-        sys.exit(1)
+        print("No Issue object available; cannot attach files programmatically. You may need to ensure PyGithub path succeeded or parse CLI output.")
 
 def main():
     args = parse_args()
