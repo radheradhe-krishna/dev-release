@@ -57,36 +57,35 @@ def validate_assignees(repo, gh, assignees):
 
 def upload_attachment_to_repo_and_comment(repo, issue, filepath, jira_key):
     """
-    Upload a local file to a dedicated attachments branch and post a comment with the raw URL.
+    Upload a local filepath to a dedicated attachments branch and post a comment with the raw URL.
 
-    Behavior:
-      - branch: issue-attachments/<jira_key>
-      - file path on that branch: attachments/<jira_key>/<filename>
-      - after upload, posts a comment on the issue embedding the image via raw.githubusercontent.com
-    Returns True on success, False on failure (but never raises).
+    - branch: issue-attachments/<jira_key>
+    - path: issue-attachments/<jira_key>/<filename>
+    - posts comment on the created issue with an embedded image link (raw.githubusercontent.com).
     """
     import time
     from github import GithubException
 
     filename = os.path.basename(filepath)
     branch_name = f"issue-attachments/{jira_key}"
-    target_path = f"attachments/{jira_key}/{filename}"
+    target_path = f"{branch_name}/{filename}"  # same structure on branch
 
     try:
-        # 1) Ensure branch exists; if not, create it from default branch
+        # Ensure branch exists. If not, create it from default branch
         try:
             repo.get_branch(branch_name)
             print(f"Branch {branch_name} already exists.")
         except GithubException as exc:
-            if getattr(exc, "status", None) == 404:
-                print(f"Creating branch {branch_name} from default branch '{repo.default_branch}'")
+            # If branch does not exist, create it from default branch sha
+            if exc.status == 404:
+                print(f"Creating branch {branch_name} from {repo.default_branch}")
                 default_branch = repo.get_branch(repo.default_branch)
                 sha = default_branch.commit.sha
                 ref = f"refs/heads/{branch_name}"
                 try:
                     repo.create_git_ref(ref, sha)
                     print(f"Created branch {branch_name}")
-                    # give GitHub a moment to settle the new ref
+                    # small delay to allow GitHub to index the ref
                     time.sleep(1)
                 except Exception as e_ref:
                     print(f"Failed to create branch {branch_name}: {e_ref}")
@@ -95,47 +94,51 @@ def upload_attachment_to_repo_and_comment(repo, issue, filepath, jira_key):
                 print(f"Error checking branch {branch_name}: {exc}")
                 raise
 
-        # 2) Read local file bytes
+        # Read file bytes and convert to latin-1 string (preserve bytes)
         try:
             with open(filepath, "rb") as fh:
                 content_bytes = fh.read()
-            # PyGithub create_file/update_file expects a string for content; decode latin-1 preserves bytes
             content_str = content_bytes.decode("latin-1")
         except Exception as e_read:
             print(f"Failed to read {filepath}: {e_read}")
+            # Post a fallback comment noting local path
             try:
                 issue.create_comment(f"**Attachment failed to read:** `{filename}` — saved on runner at `{filepath}` (read error: {e_read})")
             except Exception:
                 pass
             return False
 
-        # 3) Create or update file on the attachments branch
+        # Attempt to create or update the file on the attachments branch
         try:
+            # If file already exists on branch, use update_file
             try:
                 existing_file = repo.get_contents(target_path, ref=branch_name)
-                # update existing file
+                # update
                 commit_msg = f"Update attachment {filename} for issue {issue.number}"
                 repo.update_file(existing_file.path, commit_msg, content_str, existing_file.sha, branch=branch_name)
-                print(f"Updated existing file at {target_path} on branch {branch_name}")
+                print(f"Updated existing file at {target_path} on {branch_name}")
             except GithubException as not_found_exc:
                 if getattr(not_found_exc, "status", None) == 404:
                     # create new file
                     commit_msg = f"Add attachment {filename} for issue {issue.number}"
                     repo.create_file(target_path, commit_msg, content_str, branch=branch_name)
-                    print(f"Created file at {target_path} on branch {branch_name}")
+                    print(f"Created file at {target_path} on {branch_name}")
                 else:
+                    # other error
                     print(f"Error checking/creating file {target_path}: {not_found_exc}")
                     raise
         except Exception as e_create:
             print(f"Failed to create/update file {target_path} on branch {branch_name}: {e_create}")
+            # fallback: post comment with local path
             try:
                 issue.create_comment(f"**Attachment:** `{filename}` (failed to upload to repo: {e_create}). Local path: `{filepath}`")
             except Exception:
                 pass
             return False
 
-        # 4) Build raw URL and post comment with embedded image
+        # Build raw URL using branch_name (not default branch)
         raw_url = f"https://raw.githubusercontent.com/{repo.full_name}/{branch_name}/{target_path}"
+        # Post a comment with embedded image
         comment_body = f"**Attachment:** `{filename}`\n\n![{filename}]({raw_url})"
         try:
             issue.create_comment(comment_body)
