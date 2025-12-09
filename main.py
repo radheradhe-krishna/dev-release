@@ -9,6 +9,9 @@ from github.GithubException import GithubException
 from issue_creator.issue_loader import load_vulnerabilities
 from issue_creator.issue_renderer import render_issue, render_issue_from_jira
 from issue_creator.github_client import build_issue_labels, create_issue_with_gh
+import base64
+import json
+import requests
 
 target_instance = os.getenv("TARGET_INSTANCE", "brand_landscape_analyzer").strip().lower()
 
@@ -51,6 +54,31 @@ def validate_assignees(repo, gh, assignees):
     if invalid:
         print(f"Warning: These assignees are not assignable and will be skipped: {invalid}")
     return valid
+    
+def upload_file_via_api(token: str, owner: str, repo: str, path: str, content_bytes: bytes, branch: str = "main", commit_msg: str = "Add attachment") -> bool:
+    """
+    Upload file to repo via GitHub REST API PUT /repos/{owner}/{repo}/contents/{path}
+    Returns True on success.
+    """
+    url = f"https://api.github.com/repos/{owner}/{repo}/contents/{path}"
+    b64 = base64.b64encode(content_bytes).decode("ascii")
+    payload = {
+        "message": commit_msg,
+        "content": b64,
+        "branch": branch
+    }
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "attachments-uploader"
+    }
+    resp = requests.put(url, headers=headers, data=json.dumps(payload), timeout=30)
+    if resp.status_code in (200, 201):
+        print(f"Uploaded via API: {path} (HTTP {resp.status_code})")
+        return True
+    else:
+        print(f"Failed to upload via API: {path} (HTTP {resp.status_code}) - {resp.text}")
+        return False
 
 def create_issue_from_jira():
     """Create a GitHub issue from Jira environment variables, and embed attachments as images in the issue body."""
