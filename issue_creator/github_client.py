@@ -44,25 +44,19 @@ def create_issue_with_gh(
     labels: Optional[Sequence[str]] = None,
     gh_token: Optional[str] = None,
     repo_obj: Optional[object] = None,
-) -> Union[bool, "Issue", None]:
+) -> Union[bool, "Issue", str, None]:
     """
     Create a GitHub issue.
 
-    Behavior:
-    - If a PyGithub Repo object is passed in `repo_obj` (and PyGithub is available),
-      use that to create the issue and return the created Issue object.
-    - Otherwise, fall back to using the `gh` CLI. The CLI path returns True on success,
-      False on failure (maintains backward compatibility).
-
     Returns:
       - PyGithub Issue object on success when using PyGithub
-      - True on success when using gh CLI
+      - issue URL (string) on success when using gh CLI and URL can be parsed
+      - True on success when using gh CLI but no URL parsed
       - False or None on failure
     """
     # Try PyGithub path if repo_obj is provided (preferred for programmatic access)
     if repo_obj is not None and Github is not None:
         try:
-            # repo_obj is assumed to be a PyGithub Repository object
             issue = repo_obj.create_issue(
                 title=title,
                 body=body,
@@ -72,7 +66,10 @@ def create_issue_with_gh(
             print(f"Created issue via PyGithub: {title} (#{issue.number})")
             return issue
         except Exception as exc:
-            print(f"Failed to create issue via PyGithub: {exc}")
+            # Print full traceback information for debugging
+            import traceback
+            print("Failed to create issue via PyGithub:")
+            traceback.print_exc()
             # fall through to CLI fallback
 
     # Fallback: use gh CLI (keeps previous behavior)
@@ -88,8 +85,13 @@ def create_issue_with_gh(
             cmd += ["--label", label]
     try:
         result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+        stdout = result.stdout.strip()
         print(f"Created issue via gh: {title}")
-        print(result.stdout.strip())
+        print(stdout)
+        # Attempt to parse an issue URL from stdout
+        m = re.search(r"https?://github\.com/[^\s]+/issues/\d+", stdout)
+        if m:
+            return m.group(0)
         return True
     except subprocess.CalledProcessError as exc:
         print(f"Failed to create issue via gh CLI: {title}")
