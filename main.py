@@ -3,6 +3,10 @@ import argparse
 import os
 import sys
 import glob
+import time
+import requests
+import base64
+import json
 from dotenv import load_dotenv
 from github import Github
 from github.GithubException import GithubException
@@ -51,6 +55,76 @@ def validate_assignees(repo, gh, assignees):
     if invalid:
         print(f"Warning: These assignees are not assignable and will be skipped: {invalid}")
     return valid
+
+def create_branch_and_upload_via_api(token: str, owner: str, repo_name: str, jira_key: str, local_filepath: str, branch_name: str = None) -> bool:
+    """
+    REST fallback: create branch issue-attachments/<jira_key> from default branch and upload local_filepath
+    into attachments/<jira_key>/<filename> on that branch using GitHub REST API.
+    Returns True on success.
+    """
+    if branch_name is None:
+        branch_name = f"issue-attachments/{jira_key}"
+    api_base = f"https://api.github.com/repos/{owner}/{repo_name}"
+
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json",
+        "User-Agent": "attachments-uploader"
+    }
+
+    # 1) Get default branch name and sha
+    r = requests.get(f"{api_base}", headers=headers, timeout=15)
+    if r.status_code != 200:
+        print(f"[REST fallback] Failed to get repo info: {r.status_code} {r.text}")
+        return False
+    repo_info = r.json()
+    default_branch = repo_info.get("default_branch")
+    print(f"[REST fallback] default_branch: {default_branch}")
+
+    r = requests.get(f"{api_base}/git/refs/heads/{default_branch}", headers=headers, timeout=15)
+    if r.status_code != 200:
+        print(f"[REST fallback] Failed to get ref for {default_branch}: {r.status_code} {r.text}")
+        return False
+    base_sha = r.json()["object"]["sha"]
+    print(f"[REST fallback] base_sha: {base_sha}")
+
+    # 2) Create the new branch ref
+    payload = {"ref": f"refs/heads/{branch_name}", "sha": base_sha}
+    r = requests.post(f"{api_base}/git/refs", headers=headers, json=payload, timeout=15)
+    if r.status_code not in (200, 201):
+        # if branch already exists, that's fine
+        if r.status_code == 422 and "Reference already exists" in r.text:
+            print(f"[REST fallback] Branch {branch_name} already exists (api message).")
+        else:
+            print(f"[REST fallback] Failed to create ref {branch_name}: {r.status_code} {r.text}")
+            return False
+    else:
+        print(f"[REST fallback] Created branch {branch_name} via API")
+
+    # 3) Upload file to contents endpoint
+    filename = os.path.basename(local_filepath)
+    target_path = f"attachments/{jira_key}/{filename}"
+    try:
+        with open(local_filepath, "rb") as fh:
+            content_bytes = fh.read()
+    except Exception as e:
+        print(f"[REST fallback] Failed to read {local_filepath}: {e}")
+        return False
+
+    b64 = base64.b64encode(content_bytes).decode("ascii")
+    payload = {
+        "message": f"Add attachment {filename} for Jira {jira_key}",
+        "content": b64,
+        "branch": branch_name
+    }
+    r = requests.put(f"{api_base}/contents/{target_path}", headers=headers, json=payload, timeout=30)
+    if r.status_code in (200, 201):
+        print(f"[REST fallback] Uploaded {target_path} to branch {branch_name}")
+        return True
+    else:
+        # If file exists, response will contain current sha — you can update by sending that sha.
+        print(f"[REST fallback] Failed to upload {target_path}: {r.status_code} {r.text}")
+        return False
 
 def upload_attachment_to_repo_and_comment(repo, issue, filepath, jira_key):
     """
@@ -125,6 +199,24 @@ def upload_attachment_to_repo_and_comment(repo, issue, filepath, jira_key):
                     raise
         except Exception as e_create:
             print(f"Failed to create/update file {target_path} on branch {branch_name}: {e_create}")
+        # --- REST fallback invocation ---
+            token = os.getenv("GH_PAT_AGENT")
+            owner_repo = repo.full_name.split("/", 1)
+            if token and len(owner_repo) == 2:
+                owner, repo_name = owner_repo
+                print("[fallback] Attempting REST fallback to create branch & upload file")
+                ok = create_branch_and_upload_via_api(token, owner, repo_name, jira_key, filepath, branch_name=branch_name)
+                if ok:
+                    raw_url = f"https://raw.githubusercontent.com/{repo.full_name}/{branch_name}/{target_path}"
+                    try:
+                        issue.create_comment(f"**Attachment:** `{filename}`\n\n![{filename}]({raw_url})")
+                        print(f"Posted comment with attachment {filename} linking to {raw_url} (REST fallback)")
+                        return True
+                    except Exception as e_comment:
+                        print(f"Failed to post comment after REST fallback upload: {e_comment}")
+                        return False
+            # --- end REST fallback ---
+            # fallback: post comment with local path so humans can retrieve it
             try:
                 issue.create_comment(f"**Attachment:** `{filename}` (failed to upload to repo: {e_create}). Local path: `{filepath}`")
             except Exception:
