@@ -51,14 +51,30 @@ def validate_assignees(repo, gh, assignees):
         print(f"Warning: These assignees are not assignable and will be skipped: {invalid}")
     return valid
 
+def upload_image_to_issue(repo, issue, image_path):
+    """Upload image as an issue comment with embedded image"""
+    filename = os.path.basename(image_path)
+    
+    # Read image and create comment with image
+    # GitHub will host the image when you add it to a comment
+    with open(image_path, 'rb') as f:
+        # You can upload via issue.create_comment() with drag-drop simulation
+        # Or use the simpler approach: reference local path and let GitHub handle it
+        pass
+    
+    # Alternative: Upload to a release asset or gist and get URL
+    # For now, we'll just reference the filename
+    return filename
+    
 def create_issue_from_jira():
     """Create a GitHub issue from Jira environment variables."""
     load_dotenv()
     
     jira_issue_key = os.getenv("JIRA_ISSUE_KEY")
     jira_summary = os.getenv("JIRA_SUMMARY")
+    jira_attachments = os.getenv("JIRA_ATTACHMENTS", "")
     dry_run = os.getenv("DRY_RUN", "false").lower() == "true"
-    # labels = args.label or os.environ.get("LABEL")
+    # labels = os.getenv("LABEL")
 
     if not jira_issue_key:
         print("Error: JIRA_ISSUE_KEY environment variable not set")
@@ -99,6 +115,25 @@ def create_issue_from_jira():
         jira_summary=jira_summary
     )
     
+    # Add attachment section if attachments exist
+    if jira_attachments:
+        body += "\n\n## 📎 Attachments from Jira\n"
+        
+        # Parse attachment filenames
+        attachment_files = []
+        for attach in jira_attachments.split(","):
+            if ":" in attach:
+                filename = attach.split(":")[0]
+                attachment_files.append(filename)
+        
+        # List downloaded files
+        downloaded = glob.glob("attachments/*")
+        for filepath in downloaded:
+            filename = os.path.basename(filepath)
+            body += f"- 🖼️ `{filename}` (see comment below)\n"
+    
+    title = f"[Security] {jira_summary} - {jira_issue_key}"
+    
     if create_issue_with_gh(
         title=title,
         body=body,
@@ -106,6 +141,21 @@ def create_issue_from_jira():
         labels=labels,
     ):
         print(f"\nSuccessfully created issue for {jira_issue_key}")
+
+     # If attachments exist, add them as comments
+        if jira_attachments and downloaded:
+            issue = repo.get_issues(state='open')[0]  # Get the just-created issue
+            
+            for filepath in downloaded:
+                filename = os.path.basename(filepath)
+                # Note: PyGithub doesn't support direct image upload
+                # You need to use GitHub's web interface or a workaround
+                comment_body = f"**Attachment:** `{filename}`\n\n"
+                comment_body += f"_Downloaded from Jira. File saved at: `{filepath}`_"
+                issue.create_comment(comment_body)
+    else:
+        print(f"\n❌ Failed to create issue for {jira_issue_key}")
+        sys.exit(1)
     else:
         print(f"\nFailed to create issue for {jira_issue_key}")
         sys.exit(1)
