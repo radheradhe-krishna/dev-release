@@ -14,6 +14,8 @@ from issue_creator.issue_loader import load_vulnerabilities
 from issue_creator.issue_renderer import render_issue, render_issue_from_jira
 from issue_creator.github_client import build_issue_labels, create_issue_with_gh
 
+# Use a single attachments branch for all issues; each issue will have its own folder under attachments/
+ATTACHMENTS_BRANCH = os.getenv("ATTACHMENTS_BRANCH", "issue-attachments").strip()
 target_instance = os.getenv("TARGET_INSTANCE", "brand_landscape_analyzer").strip().lower()
 
 def parse_args():
@@ -58,12 +60,12 @@ def validate_assignees(repo, gh, assignees):
 
 def create_branch_and_upload_via_api(token: str, owner: str, repo_name: str, jira_key: str, local_filepath: str, branch_name: str = None) -> bool:
     """
-    REST fallback: create branch issue-attachments/<jira_key> from default branch and upload local_filepath
-    into attachments/<jira_key>/<filename> on that branch using GitHub REST API.
+    REST fallback: create a single attachments branch (default 'issue-attachments') from default branch and upload
+    local_filepath into attachments/<jira_key>/<filename> on that branch using GitHub REST API.
     Returns True on success.
     """
     if branch_name is None:
-        branch_name = f"issue-attachments/{jira_key}"
+        branch_name = ATTACHMENTS_BRANCH
     api_base = f"https://api.github.com/repos/{owner}/{repo_name}"
 
     headers = {
@@ -88,7 +90,7 @@ def create_branch_and_upload_via_api(token: str, owner: str, repo_name: str, jir
     base_sha = r.json()["object"]["sha"]
     print(f"[REST fallback] base_sha: {base_sha}")
 
-    # 2) Create the new branch ref
+    # 2) Create the attachments branch ref (if it doesn't already exist)
     payload = {"ref": f"refs/heads/{branch_name}", "sha": base_sha}
     r = requests.post(f"{api_base}/git/refs", headers=headers, json=payload, timeout=15)
     if r.status_code not in (200, 201):
@@ -101,7 +103,7 @@ def create_branch_and_upload_via_api(token: str, owner: str, repo_name: str, jir
     else:
         print(f"[REST fallback] Created branch {branch_name} via API")
 
-    # 3) Upload file to contents endpoint
+    # 3) Upload file to contents endpoint under attachments/<jira_key>/<filename>
     filename = os.path.basename(local_filepath)
     target_path = f"attachments/{jira_key}/{filename}"
     try:
@@ -128,10 +130,10 @@ def create_branch_and_upload_via_api(token: str, owner: str, repo_name: str, jir
 
 def upload_attachment_to_repo_and_comment(repo, issue, filepath, jira_key):
     """
-    Upload a local file to a dedicated attachments branch and post a comment with the raw URL.
+    Upload a local file to a single attachments branch and post a comment with the raw URL.
 
     Behavior:
-      - branch: issue-attachments/<jira_key>
+      - single branch: ATTACHMENTS_BRANCH (default 'issue-attachments')
       - file path on that branch: attachments/<jira_key>/<filename>
       - after upload, posts a comment on the issue embedding the image via raw.githubusercontent.com
     Returns True on success, False on failure (but never raises).
@@ -140,11 +142,11 @@ def upload_attachment_to_repo_and_comment(repo, issue, filepath, jira_key):
     from github import GithubException
 
     filename = os.path.basename(filepath)
-    branch_name = f"issue-attachments/{jira_key}"
+    branch_name = ATTACHMENTS_BRANCH
     target_path = f"attachments/{jira_key}/{filename}"
 
     try:
-        # 1) Ensure branch exists; if not, create it from default branch
+        # 1) Ensure attachments branch exists; if not, create it from default branch
         try:
             repo.get_branch(branch_name)
             print(f"Branch {branch_name} already exists.")
@@ -180,7 +182,7 @@ def upload_attachment_to_repo_and_comment(repo, issue, filepath, jira_key):
                 pass
             return False
 
-        # 3) Create or update file on the attachments branch
+        # 3) Create or update file on the attachments branch inside the per-issue folder
         try:
             try:
                 existing_file = repo.get_contents(target_path, ref=branch_name)
@@ -199,7 +201,7 @@ def upload_attachment_to_repo_and_comment(repo, issue, filepath, jira_key):
                     raise
         except Exception as e_create:
             print(f"Failed to create/update file {target_path} on branch {branch_name}: {e_create}")
-        # --- REST fallback invocation ---
+            # --- REST fallback invocation ---
             token = os.getenv("GH_PAT_AGENT")
             owner_repo = repo.full_name.split("/", 1)
             if token and len(owner_repo) == 2:
@@ -252,7 +254,6 @@ def create_issue_from_jira():
     jira_description = os.getenv("JIRA_DESCRIPTION", "")
     dry_run = os.getenv("DRY_RUN", "false").lower() == "true"
     # labels = os.getenv("LABEL")
-    print(f"  ^^^^^^^^^^^^^^^^^^^madhu: {jira_description}")
     
     if not jira_issue_key:
         print("Error: JIRA_ISSUE_KEY environment variable not set")
@@ -261,7 +262,7 @@ def create_issue_from_jira():
         print("Error: JIRA_SUMMARY environment variable not set")
         sys.exit(1)
     
-    title = f"[Security] {jira_summary} - {jira_issue_key}"
+    title = f"{jira_summary} - {jira_issue_key}"
     
     if dry_run:
         print("\n=== DRY RUN MODE ===")
