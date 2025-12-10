@@ -280,8 +280,8 @@ def create_issue_from_jira():
         sys.exit(1)
     
     gh, repo = ensure_repo(token, repo_name)
-    # assignees_env = os.getenv("ASSIGNEES", "").strip()
-    # assignees = [part.strip() for part in assignees_env.split(",") if part.strip()]
+    assignees_env = os.getenv("ASSIGNEES", "").strip()
+    assignees = [part.strip() for part in assignees_env.split(",") if part.strip()]
     
     # Default label for vulnerability
     # assignees = ["hrutvipujar-sudo"] 
