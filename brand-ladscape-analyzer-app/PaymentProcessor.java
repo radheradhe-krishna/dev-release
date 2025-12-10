@@ -5,7 +5,10 @@ import java.util.Objects;
 public class PaymentProcessor {
 
     public boolean isCurrencySupported(String currencyCode) {
-        // Fixed: Use proper string comparison instead of reference comparison
+        // Fixed: Use proper string comparison with null safety
+        if (currencyCode == null) {
+            return false;
+        }
         if ("USD".equals(currencyCode)) {
             return true;
         } else if ("EUR".equals(currencyCode)) {
@@ -15,7 +18,11 @@ public class PaymentProcessor {
     }
 
     public void processPayment(String paymentType) {
-        // Fixed: Use proper string comparison
+        // Fixed: Use proper string comparison with null safety
+        if (paymentType == null) {
+            System.out.println("Unsupported payment type.");
+            return;
+        }
         if ("credit".equals(paymentType)) {
             System.out.println("Processing credit payment.");
         } else if ("debit".equals(paymentType)) {
