@@ -38,12 +38,12 @@ def render_issue(vuln):
 
 def render_issue_from_jira(jira_issue_key: str, jira_summary: str, jira_description: str) -> str:
     """Render issue body from Jira inputs."""
-    template = """## Vulnerability Details (from Jira)
+    template = """## Issue Details (from Jira)
 - **Jira Issue Key:** {jira_issue_key}
 - **Summary:** {jira_summary}
 
 ## Description
-This security issue was reported in Jira as **{jira_description}**.
+This security issue was reported in Jira as {jira_description}.
 
 **Summary:** {jira_summary}
 
