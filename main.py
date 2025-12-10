@@ -249,6 +249,7 @@ def create_issue_from_jira():
     jira_issue_key = os.getenv("JIRA_ISSUE_KEY")
     jira_summary = os.getenv("JIRA_SUMMARY")
     jira_attachments = os.getenv("JIRA_ATTACHMENTS", "")
+    jira_description = os.getenv("JIRA_DESCRIPTION")
     dry_run = os.getenv("DRY_RUN", "false").lower() == "true"
     # labels = os.getenv("LABEL")
 
@@ -289,7 +290,8 @@ def create_issue_from_jira():
     
     body = render_issue_from_jira(
         jira_issue_key=jira_issue_key,
-        jira_summary=jira_summary
+        jira_summary=jira_summary,
+        jira_description=jira_description
     )
     
     # robustly discover attachments (search runner workspace + cwd)
