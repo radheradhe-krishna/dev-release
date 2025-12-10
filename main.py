@@ -249,10 +249,11 @@ def create_issue_from_jira():
     jira_issue_key = os.getenv("JIRA_ISSUE_KEY")
     jira_summary = os.getenv("JIRA_SUMMARY")
     jira_attachments = os.getenv("JIRA_ATTACHMENTS", "")
-    jira_description = os.getenv("JIRA_DESCRIPTION")
+    jira_description = os.getenv("JIRA_DESCRIPTION", "")
     dry_run = os.getenv("DRY_RUN", "false").lower() == "true"
     # labels = os.getenv("LABEL")
-
+    print(f"  ^^^^^^^^^^^^^^^^^^^madhu: {jira_description}")
+    
     if not jira_issue_key:
         print("Error: JIRA_ISSUE_KEY environment variable not set")
         sys.exit(1)
