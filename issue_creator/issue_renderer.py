@@ -36,7 +36,7 @@ def render_issue(vuln):
 
     return get_issue_template().format_map(context)
 
-def render_issue_from_jira(jira_issue_key: str, jira_summary: str) -> str:
+def render_issue_from_jira(jira_issue_key: str, jira_summary: str, jira_description: str) -> str:
     """Render issue body from Jira inputs."""
     template = """## Vulnerability Details (from Jira)
 - **Jira Issue Key:** {jira_issue_key}
@@ -46,6 +46,8 @@ def render_issue_from_jira(jira_issue_key: str, jira_summary: str) -> str:
 This security issue was reported in Jira as **{jira_issue_key}**.
 
 **Summary:** {jira_summary}
+
+**Description:** {jira_description}
 
 Please investigate and resolve this vulnerability in the codebase.
 
