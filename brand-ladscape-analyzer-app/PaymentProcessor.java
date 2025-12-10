@@ -5,10 +5,12 @@ import java.util.Objects;
 public class PaymentProcessor {
 
     public boolean isCurrencySupported(String currencyCode) {
-        // Intentionally wrong comparison for testing
-        if (currencyCode == "USD") {
+        // Fixed string comparison and added INR support
+        if (Objects.equals(currencyCode, "USD")) {
             return true;
-        } else if (currencyCode == "EUR") {
+        } else if (Objects.equals(currencyCode, "EUR")) {
+            return true;
+        } else if (Objects.equals(currencyCode, "INR")) {
             return true;
         }
         return false;
