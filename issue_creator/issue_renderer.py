@@ -43,7 +43,7 @@ def render_issue_from_jira(jira_issue_key: str, jira_summary: str, jira_descript
 - **Summary:** {jira_summary}
 
 ## Description
-This security issue was reported in Jira as **{jira_issue_key}**.
+This security issue was reported in Jira as **{jira_description}**.
 
 **Summary:** {jira_summary}
 
