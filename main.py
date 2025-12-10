@@ -284,7 +284,7 @@ def create_issue_from_jira():
     # assignees = [part.strip() for part in assignees_env.split(",") if part.strip()]
     
     # Default label for vulnerability
-    assignees = ["hrutvipujar-sudo"] 
+    # assignees = ["hrutvipujar-sudo"] 
     labels = ["jira-issue"]
     
     body = render_issue_from_jira(
