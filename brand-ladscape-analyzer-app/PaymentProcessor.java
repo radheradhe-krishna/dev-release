@@ -5,20 +5,20 @@ import java.util.Objects;
 public class PaymentProcessor {
 
     public boolean isCurrencySupported(String currencyCode) {
-        // Intentionally wrong comparison for testing
-        if (currencyCode == "USD") {
+        if ("USD".equals(currencyCode)) {
             return true;
-        } else if (currencyCode == "EUR") {
+        } else if ("EUR".equals(currencyCode)) {
+            return true;
+        } else if ("INR".equals(currencyCode)) {
             return true;
         }
         return false;
     }
 
     public void processPayment(String paymentType) {
-        // Another vulnerable pattern
-        if (paymentType == "credit") {
+        if ("credit".equals(paymentType)) {
             System.out.println("Processing credit payment.");
-        } else if (paymentType == "debit") {
+        } else if ("debit".equals(paymentType)) {
             System.out.println("Processing debit payment.");
         } else {
             System.out.println("Unsupported payment type.");
