@@ -43,13 +43,11 @@ def render_issue_from_jira(jira_issue_key: str, jira_summary: str, jira_descript
 - **Summary:** {jira_summary}
 
 ## Description
-This security issue was reported in Jira as {jira_description}.
+{jira_description}
 
 **Summary:** {jira_summary}
 
-**Description:** {jira_description}
-
-Please investigate and resolve this vulnerability in the codebase.
+Please investigate and resolve this Issue in the codebase.
 
 ## Recommendation
 1. Review the code related to this Jira issue
@@ -75,6 +73,7 @@ Please investigate and resolve this vulnerability in the codebase.
     context = SafeDict(
         jira_issue_key=jira_issue_key,
         jira_summary=jira_summary,
+        jira_description=sanitize(jira_description or "No description provided"),
     )
     
     return template.format_map(context)
