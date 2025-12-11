@@ -10,7 +10,6 @@ import json
 from dotenv import load_dotenv
 from github import Github
 from github.GithubException import GithubException
-from issue_creator.issue_loader import load_vulnerabilities
 from issue_creator.issue_renderer import render_issue, render_issue_from_jira
 from issue_creator.github_client import build_issue_labels, create_issue_with_gh
 
@@ -405,53 +404,53 @@ def main():
         create_issue_from_jira()
         return
     
-    load_dotenv()
-    df = load_vulnerabilities(args.excel_file)
-    print(df.columns.tolist())
+    # load_dotenv()
+    # df = load_vulnerabilities(args.excel_file)
+    # print(df.columns.tolist())
 
-    if args.dry_run:
-        print("\n=== DRY RUN MODE ===")
-        print(f"Would create {len(df)} issues:")
-        for _, vuln in df.iterrows():
-            instances = vuln.get("Unique Instance List", "")
-            if "brand_landscape_analyzer" not in str(instances):
-                continue
-            title = f"[Security] {vuln.get('Name', 'Vulnerability')} - {vuln.get('ID', 'Unknown ID')}"
-            print(f"  - {title}")
-            print(f"    CVSS Score: {vuln.get('CVSS Score', 'N/A')}")
-            print(f"    Finding Type: {vuln.get('Finding Type', 'N/A')}")
-            print()
-        return
+    # if args.dry_run:
+    #     print("\n=== DRY RUN MODE ===")
+    #     print(f"Would create {len(df)} issues:")
+    #     for _, vuln in df.iterrows():
+    #         instances = vuln.get("Unique Instance List", "")
+    #         if "brand_landscape_analyzer" not in str(instances):
+    #             continue
+    #         title = f"[Security] {vuln.get('Name', 'Vulnerability')} - {vuln.get('ID', 'Unknown ID')}"
+    #         print(f"  - {title}")
+    #         print(f"    CVSS Score: {vuln.get('CVSS Score', 'N/A')}")
+    #         print(f"    Finding Type: {vuln.get('Finding Type', 'N/A')}")
+    #         print()
+    #     return
 
-    token = os.getenv("GH_PAT_AGENT")
-    repo_name = os.getenv("GITHUB_REPOSITORY")
-    if not token:
-        print("Error: GH_PAT_AGENT environment variable not set")
-        sys.exit(1)
-    if not repo_name:
-        print("Error: GITHUB_REPOSITORY environment variable not set")
-        sys.exit(1)
+    # token = os.getenv("GH_PAT_AGENT")
+    # repo_name = os.getenv("GITHUB_REPOSITORY")
+    # if not token:
+    #     print("Error: GH_PAT_AGENT environment variable not set")
+    #     sys.exit(1)
+    # if not repo_name:
+    #     print("Error: GITHUB_REPOSITORY environment variable not set")
+    #     sys.exit(1)
 
-    gh, repo = ensure_repo(token, repo_name)
-    assignees_env = os.getenv("ASSIGNEES", "").strip()
-    assignees = [part.strip() for part in assignees_env.split(",") if part.strip()]
+    # gh, repo = ensure_repo(token, repo_name)
+    # assignees_env = os.getenv("ASSIGNEES", "").strip()
+    # assignees = [part.strip() for part in assignees_env.split(",") if part.strip()]
 
-    created = 0
-    for idx, vuln in df.iterrows():
-        instances = str(vuln.get("Unique Instance List", "")).lower()
-        if target_instance not in instances:
-            continue
-        print(f"Processing vulnerability {idx + 1}/{len(df)}: {vuln.get('Name', 'Vulnerability')} - {vuln.get('ID', 'Unknown ID')} [Label: {vuln.get('Label', 'N/A')}]")
-        labels = build_issue_labels(vuln, args.labels or [])
-        if create_issue_with_gh(
-            title=f"[Security] {vuln.get('Name', 'Vulnerability')} - {vuln.get('ID', 'Unknown ID')}",
-            body=render_issue(vuln),
-            assignees=assignees,
-            labels=labels,
-        ):
-            created += 1
+    # created = 0
+    # for idx, vuln in df.iterrows():
+    #     instances = str(vuln.get("Unique Instance List", "")).lower()
+    #     if target_instance not in instances:
+    #         continue
+    #     print(f"Processing vulnerability {idx + 1}/{len(df)}: {vuln.get('Name', 'Vulnerability')} - {vuln.get('ID', 'Unknown ID')} [Label: {vuln.get('Label', 'N/A')}]")
+    #     labels = build_issue_labels(vuln, args.labels or [])
+    #     if create_issue_with_gh(
+    #         title=f"[Security] {vuln.get('Name', 'Vulnerability')} - {vuln.get('ID', 'Unknown ID')}",
+    #         body=render_issue(vuln),
+    #         assignees=assignees,
+    #         labels=labels,
+    #     ):
+    #         created += 1
 
-    print(f"\nSuccessfully created {created} issues out of {len(df)} vulnerabilities")
+    # print(f"\nSuccessfully created {created} issues out of {len(df)} vulnerabilities")
 
 if __name__ == "__main__":
     main()
