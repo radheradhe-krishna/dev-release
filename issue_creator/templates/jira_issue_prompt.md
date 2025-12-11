@@ -1,4 +1,3 @@
-```markdown
 ## Jira Bug Report
 - **Issue Key:** {jira_issue_key}
 - **Summary:** {jira_summary}
@@ -63,4 +62,3 @@ When finished, post a final comment on the issue summarizing:
 - Files changed, tests added, and findings from attachments
 - How to validate the fix locally
 - Any open follow-ups or limitations
-```
