@@ -18,10 +18,10 @@ ATTACHMENTS_BRANCH = os.getenv("ATTACHMENTS_BRANCH", "issue-attachments").strip(
 target_instance = os.getenv("TARGET_INSTANCE", "brand_landscape_analyzer").strip().lower()
 
 def parse_args():
-    parser = argparse.ArgumentParser(description="Create GitHub issues from vulnerability Excel file or Jira inputs")
-    parser.add_argument("excel_file", nargs="?", default="vulnerabilities-issues.xlsx", help="Path to the Excel file")
+    parser = argparse.ArgumentParser(
+        description="Create a single GitHub issue from Jira environment variables (Jira-driven workflow)"
+    )
     parser.add_argument("--dry-run", action="store_true", help="Print issues without creating them")
-    parser.add_argument("--labels", nargs="*", help="Additional labels to add to issues")
     parser.add_argument("--from-jira", action="store_true", help="Create issue from Jira environment variables")
     return parser.parse_args()
 
@@ -57,192 +57,120 @@ def validate_assignees(repo, gh, assignees):
         print(f"Warning: These assignees are not assignable and will be skipped: {invalid}")
     return valid
 
-def create_branch_and_upload_via_api(token: str, owner: str, repo_name: str, jira_key: str, local_filepath: str, branch_name: str = None) -> bool:
+def upload_attachment(repo, issue, filepath, jira_key):
     """
-    REST fallback: create a single attachments branch (default 'issue-attachments') from default branch and upload
-    local_filepath into attachments/<jira_key>/<filename> on that branch using GitHub REST API.
-    Returns True on success.
-    """
-    if branch_name is None:
-        branch_name = ATTACHMENTS_BRANCH
-    api_base = f"https://api.github.com/repos/{owner}/{repo_name}"
-
-    headers = {
-        "Authorization": f"token {token}",
-        "Accept": "application/vnd.github.v3+json",
-        "User-Agent": "attachments-uploader"
-    }
-
-    # 1) Get default branch name and sha
-    r = requests.get(f"{api_base}", headers=headers, timeout=15)
-    if r.status_code != 200:
-        print(f"[REST fallback] Failed to get repo info: {r.status_code} {r.text}")
-        return False
-    repo_info = r.json()
-    default_branch = repo_info.get("default_branch")
-    print(f"[REST fallback] default_branch: {default_branch}")
-
-    r = requests.get(f"{api_base}/git/refs/heads/{default_branch}", headers=headers, timeout=15)
-    if r.status_code != 200:
-        print(f"[REST fallback] Failed to get ref for {default_branch}: {r.status_code} {r.text}")
-        return False
-    base_sha = r.json()["object"]["sha"]
-    print(f"[REST fallback] base_sha: {base_sha}")
-
-    # 2) Create the attachments branch ref (if it doesn't already exist)
-    payload = {"ref": f"refs/heads/{branch_name}", "sha": base_sha}
-    r = requests.post(f"{api_base}/git/refs", headers=headers, json=payload, timeout=15)
-    if r.status_code not in (200, 201):
-        # if branch already exists, that's fine
-        if r.status_code == 422 and "Reference already exists" in r.text:
-            print(f"[REST fallback] Branch {branch_name} already exists (api message).")
-        else:
-            print(f"[REST fallback] Failed to create ref {branch_name}: {r.status_code} {r.text}")
-            return False
-    else:
-        print(f"[REST fallback] Created branch {branch_name} via API")
-
-    # 3) Upload file to contents endpoint under attachments/<jira_key>/<filename>
-    filename = os.path.basename(local_filepath)
-    target_path = f"attachments/{jira_key}/{filename}"
-    try:
-        with open(local_filepath, "rb") as fh:
-            content_bytes = fh.read()
-    except Exception as e:
-        print(f"[REST fallback] Failed to read {local_filepath}: {e}")
-        return False
-
-    b64 = base64.b64encode(content_bytes).decode("ascii")
-    payload = {
-        "message": f"Add attachment {filename} for Jira {jira_key}",
-        "content": b64,
-        "branch": branch_name
-    }
-    r = requests.put(f"{api_base}/contents/{target_path}", headers=headers, json=payload, timeout=30)
-    if r.status_code in (200, 201):
-        print(f"[REST fallback] Uploaded {target_path} to branch {branch_name}")
-        return True
-    else:
-        # If file exists, response will contain current sha — you can update by sending that sha.
-        print(f"[REST fallback] Failed to upload {target_path}: {r.status_code} {r.text}")
-        return False
-
-def upload_attachment_to_repo_and_comment(repo, issue, filepath, jira_key):
-    """
-    Upload a local file to a single attachments branch and post a comment with the raw URL.
-
-    Behavior:
-      - single branch: ATTACHMENTS_BRANCH (default 'issue-attachments')
-      - file path on that branch: attachments/<jira_key>/<filename>
-      - after upload, posts a comment on the issue embedding the image via raw.githubusercontent.com
-    Returns True on success, False on failure (but never raises).
+    Upload a file to a single 'issue-attachments' branch under:
+        attachments/<jira_key>/<filename>
+    Tries PyGithub first → falls back to GitHub REST API.
+    Always comments on the issue with the raw GitHub URL.
     """
     import time
     from github import GithubException
+    import base64, os, requests
 
-    filename = os.path.basename(filepath)
     branch_name = ATTACHMENTS_BRANCH
+    filename = os.path.basename(filepath)
     target_path = f"attachments/{jira_key}/{filename}"
 
+    # ----------------------------------------------------
+    # STEP 1 — Ensure branch exists
+    # ----------------------------------------------------
     try:
-        # 1) Ensure attachments branch exists; if not, create it from default branch
+        repo.get_branch(branch_name)
+    except GithubException as exc:
+        if exc.status == 404:
+            default = repo.get_branch(repo.default_branch)
+            repo.create_git_ref(f"refs/heads/{branch_name}", default.commit.sha)
+            time.sleep(1)
+        else:
+            return _comment_failure(issue, filename, f"Branch check failed: {exc}")
+
+    # ----------------------------------------------------
+    # STEP 2 — Read file contents
+    # ----------------------------------------------------
+    try:
+        with open(filepath, "rb") as fh:
+            raw_bytes = fh.read()
+        content_str = raw_bytes.decode("latin-1")
+    except Exception as e:
+        return _comment_failure(issue, filename, f"File read failed: {e}")
+
+    # ----------------------------------------------------
+    # STEP 3 — Try PyGithub upload (preferred)
+    # ----------------------------------------------------
+    try:
         try:
-            repo.get_branch(branch_name)
-            print(f"Branch {branch_name} already exists.")
-        except GithubException as exc:
-            if getattr(exc, "status", None) == 404:
-                print(f"Creating branch {branch_name} from default branch '{repo.default_branch}'")
-                default_branch = repo.get_branch(repo.default_branch)
-                sha = default_branch.commit.sha
-                ref = f"refs/heads/{branch_name}"
-                try:
-                    repo.create_git_ref(ref, sha)
-                    print(f"Created branch {branch_name}")
-                    # give GitHub a moment to settle the new ref
-                    time.sleep(1)
-                except Exception as e_ref:
-                    print(f"Failed to create branch {branch_name}: {e_ref}")
-                    raise
+            existing = repo.get_contents(target_path, ref=branch_name)
+            repo.update_file(existing.path,
+                             f"Update attachment {filename}",
+                             content_str,
+                             existing.sha,
+                             branch=branch_name)
+        except GithubException as nf:
+            if nf.status == 404:
+                repo.create_file(target_path,
+                                 f"Add attachment {filename}",
+                                 content_str,
+                                 branch=branch_name)
             else:
-                print(f"Error checking branch {branch_name}: {exc}")
                 raise
-
-        # 2) Read local file bytes
-        try:
-            with open(filepath, "rb") as fh:
-                content_bytes = fh.read()
-            # PyGithub create_file/update_file expects a string for content; decode latin-1 preserves bytes
-            content_str = content_bytes.decode("latin-1")
-        except Exception as e_read:
-            print(f"Failed to read {filepath}: {e_read}")
-            try:
-                issue.create_comment(f"**Attachment failed to read:** `{filename}` — saved on runner at `{filepath}` (read error: {e_read})")
-            except Exception:
-                pass
-            return False
-
-        # 3) Create or update file on the attachments branch inside the per-issue folder
-        try:
-            try:
-                existing_file = repo.get_contents(target_path, ref=branch_name)
-                # update existing file
-                commit_msg = f"Update attachment {filename} for issue {issue.number}"
-                repo.update_file(existing_file.path, commit_msg, content_str, existing_file.sha, branch=branch_name)
-                print(f"Updated existing file at {target_path} on branch {branch_name}")
-            except GithubException as not_found_exc:
-                if getattr(not_found_exc, "status", None) == 404:
-                    # create new file
-                    commit_msg = f"Add attachment {filename} for issue {issue.number}"
-                    repo.create_file(target_path, commit_msg, content_str, branch=branch_name)
-                    print(f"Created file at {target_path} on branch {branch_name}")
-                else:
-                    print(f"Error checking/creating file {target_path}: {not_found_exc}")
-                    raise
-        except Exception as e_create:
-            print(f"Failed to create/update file {target_path} on branch {branch_name}: {e_create}")
-            # --- REST fallback invocation ---
-            token = os.getenv("GH_PAT_AGENT")
-            owner_repo = repo.full_name.split("/", 1)
-            if token and len(owner_repo) == 2:
-                owner, repo_name = owner_repo
-                print("[fallback] Attempting REST fallback to create branch & upload file")
-                ok = create_branch_and_upload_via_api(token, owner, repo_name, jira_key, filepath, branch_name=branch_name)
-                if ok:
-                    raw_url = f"https://raw.githubusercontent.com/{repo.full_name}/{branch_name}/{target_path}"
-                    try:
-                        issue.create_comment(f"**Attachment:** `{filename}`\n\n![{filename}]({raw_url})")
-                        print(f"Posted comment with attachment {filename} linking to {raw_url} (REST fallback)")
-                        return True
-                    except Exception as e_comment:
-                        print(f"Failed to post comment after REST fallback upload: {e_comment}")
-                        return False
-            # --- end REST fallback ---
-            # fallback: post comment with local path so humans can retrieve it
-            try:
-                issue.create_comment(f"**Attachment:** `{filename}` (failed to upload to repo: {e_create}). Local path: `{filepath}`")
-            except Exception:
-                pass
-            return False
-
-        # 4) Build raw URL and post comment with embedded image
         raw_url = f"https://raw.githubusercontent.com/{repo.full_name}/{branch_name}/{target_path}"
-        comment_body = f"**Attachment:** `{filename}`\n\n![{filename}]({raw_url})"
-        try:
-            issue.create_comment(comment_body)
-            print(f"Posted comment with attachment {filename} linking to {raw_url}")
-            return True
-        except Exception as e_comment:
-            print(f"Failed to post comment for {filename}: {e_comment}")
-            return False
+        issue.create_comment(f"**Attachment:** `{filename}`\n\n![{filename}]({raw_url})")
+        return True
 
-    except Exception as exc_outer:
-        print(f"Unexpected error uploading attachment {filepath}: {exc_outer}")
-        try:
-            issue.create_comment(f"**Attachment:** `{filename}` (unexpected failure: {exc_outer})")
-        except Exception:
-            pass
-        return False
+    except Exception as pyg_exc:
+        print(f"[PyGithub failed] {pyg_exc}")
 
+    # ----------------------------------------------------
+    # STEP 4 — REST API fallback
+    # ----------------------------------------------------
+    token = os.getenv("GH_PAT_AGENT")
+    if not token:
+        return _comment_failure(issue, filename, "Missing GH_PAT_AGENT token")
+
+    api_base = f"https://api.github.com/repos/{repo.full_name}"
+    headers = {
+        "Authorization": f"token {token}",
+        "Accept": "application/vnd.github.v3+json",
+    }
+
+    # 4a — Ensure branch exists
+    repo_info = requests.get(api_base, headers=headers).json()
+    default_branch = repo_info.get("default_branch")
+
+    ref_info = requests.get(f"{api_base}/git/refs/heads/{default_branch}",
+                            headers=headers).json()
+    sha = ref_info["object"]["sha"]
+
+    requests.post(f"{api_base}/git/refs",
+                  headers=headers,
+                  json={"ref": f"refs/heads/{branch_name}", "sha": sha})
+
+    # 4b — Upload file using REST /contents/{path}
+    b64 = base64.b64encode(raw_bytes).decode()
+    resp = requests.put(f"{api_base}/contents/{target_path}",
+                        headers=headers,
+                        json={
+                            "message": f"Add attachment {filename}",
+                            "content": b64,
+                            "branch": branch_name
+                        })
+
+    if resp.status_code not in (200, 201):
+        return _comment_failure(issue, filename, f"REST upload failed: {resp.text}")
+
+    # SUCCESS
+    raw_url = f"https://raw.githubusercontent.com/{repo.full_name}/{branch_name}/{target_path}"
+    issue.create_comment(f"**Attachment:** `{filename}`\n\n![{filename}]({raw_url})")
+    return True
+
+def _comment_failure(issue, filename, msg):
+    try:
+        issue.create_comment(f"**Attachment failed:** `{filename}` — {msg}")
+    except Exception:
+        pass
+    return False
+    
 def create_issue_from_jira():
     """Create a GitHub issue from Jira environment variables."""
     load_dotenv()
@@ -390,7 +318,7 @@ def create_issue_from_jira():
             if issue_obj:
                 print(f"Attaching {len(downloaded)} file(s) to issue #{issue_obj.number}")
                 for filepath in downloaded:
-                    upload_attachment_to_repo_and_comment(repo, issue_obj, filepath, jira_issue_key)
+                    upload_attachment(repo, issue_obj, filepath, jira_issue_key)
             else:
                 print("Issue created via CLI and no PyGithub Issue object available; attachments cannot be uploaded programmatically in this run.")
     else:
@@ -403,54 +331,6 @@ def main():
     if args.from_jira:
         create_issue_from_jira()
         return
-    
-    # load_dotenv()
-    # df = load_vulnerabilities(args.excel_file)
-    # print(df.columns.tolist())
-
-    # if args.dry_run:
-    #     print("\n=== DRY RUN MODE ===")
-    #     print(f"Would create {len(df)} issues:")
-    #     for _, vuln in df.iterrows():
-    #         instances = vuln.get("Unique Instance List", "")
-    #         if "brand_landscape_analyzer" not in str(instances):
-    #             continue
-    #         title = f"[Security] {vuln.get('Name', 'Vulnerability')} - {vuln.get('ID', 'Unknown ID')}"
-    #         print(f"  - {title}")
-    #         print(f"    CVSS Score: {vuln.get('CVSS Score', 'N/A')}")
-    #         print(f"    Finding Type: {vuln.get('Finding Type', 'N/A')}")
-    #         print()
-    #     return
-
-    # token = os.getenv("GH_PAT_AGENT")
-    # repo_name = os.getenv("GITHUB_REPOSITORY")
-    # if not token:
-    #     print("Error: GH_PAT_AGENT environment variable not set")
-    #     sys.exit(1)
-    # if not repo_name:
-    #     print("Error: GITHUB_REPOSITORY environment variable not set")
-    #     sys.exit(1)
-
-    # gh, repo = ensure_repo(token, repo_name)
-    # assignees_env = os.getenv("ASSIGNEES", "").strip()
-    # assignees = [part.strip() for part in assignees_env.split(",") if part.strip()]
-
-    # created = 0
-    # for idx, vuln in df.iterrows():
-    #     instances = str(vuln.get("Unique Instance List", "")).lower()
-    #     if target_instance not in instances:
-    #         continue
-    #     print(f"Processing vulnerability {idx + 1}/{len(df)}: {vuln.get('Name', 'Vulnerability')} - {vuln.get('ID', 'Unknown ID')} [Label: {vuln.get('Label', 'N/A')}]")
-    #     labels = build_issue_labels(vuln, args.labels or [])
-    #     if create_issue_with_gh(
-    #         title=f"[Security] {vuln.get('Name', 'Vulnerability')} - {vuln.get('ID', 'Unknown ID')}",
-    #         body=render_issue(vuln),
-    #         assignees=assignees,
-    #         labels=labels,
-    #     ):
-    #         created += 1
-
-    # print(f"\nSuccessfully created {created} issues out of {len(df)} vulnerabilities")
 
 if __name__ == "__main__":
     main()
