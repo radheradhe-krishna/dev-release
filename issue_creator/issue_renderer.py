@@ -2,7 +2,7 @@ from pathlib import Path
 from .utils import SafeDict, sanitize
 
 _TEMPLATE_CACHE: str | None = None
-TEMPLATE_PATH = Path(__file__).resolve().parent / "templates" / "issue_prompt.md"
+# TEMPLATE_PATH = Path(__file__).resolve().parent / "templates" / "issue_prompt.md"
 JIRA_TEMPLATE_PATH = Path(__file__).resolve().parent / "templates" / "jira_issue_prompt.md"
 
 def get_issue_template() -> str:
@@ -11,30 +11,30 @@ def get_issue_template() -> str:
         _TEMPLATE_CACHE = TEMPLATE_PATH.read_text(encoding="utf-8")
     return _TEMPLATE_CACHE
 
-def render_issue(vuln):
-    context = SafeDict(
-        scan_type=sanitize(vuln.get("Scan Type")),
-        vuln_id=sanitize(vuln.get("ID")),
-        name=sanitize(vuln.get("Name")),
-        cvss_score=sanitize(vuln.get("CVSS Score")),
-        total_count=sanitize(vuln.get("Total Count")),
-        finding_type=sanitize(vuln.get("Finding Type")),
-        compliance=sanitize(vuln.get("Compliance Framework(s)")),
-        teams_impacted=sanitize(vuln.get("Teams")),
-        unique_instances=sanitize(vuln.get("Unique Instance List")),
-        description=sanitize(vuln.get("Description", "No description provided")),
-        recommendation=sanitize(vuln.get("Recommendation", "No recommendation provided")),
-        exploit_available=sanitize(vuln.get("Exploit Available")),
-        exploit_rating=sanitize(vuln.get("Exploit Rating")),
-        mandi_ease=sanitize(vuln.get("Mandiant Ease of Attack")),
-        exploit_consequence=sanitize(vuln.get("Exploit Consequence")),
-        mitigation=sanitize(vuln.get("Mitigation")),
-        zero_day=sanitize(vuln.get("Zero Day")),
-        epss_score=sanitize(vuln.get("EPSS Score")),
-        cisa_kev=sanitize(vuln.get("CISA KEV Vulnerability")),
-    )
+# def render_issue(vuln):
+#     context = SafeDict(
+#         scan_type=sanitize(vuln.get("Scan Type")),
+#         vuln_id=sanitize(vuln.get("ID")),
+#         name=sanitize(vuln.get("Name")),
+#         cvss_score=sanitize(vuln.get("CVSS Score")),
+#         total_count=sanitize(vuln.get("Total Count")),
+#         finding_type=sanitize(vuln.get("Finding Type")),
+#         compliance=sanitize(vuln.get("Compliance Framework(s)")),
+#         teams_impacted=sanitize(vuln.get("Teams")),
+#         unique_instances=sanitize(vuln.get("Unique Instance List")),
+#         description=sanitize(vuln.get("Description", "No description provided")),
+#         recommendation=sanitize(vuln.get("Recommendation", "No recommendation provided")),
+#         exploit_available=sanitize(vuln.get("Exploit Available")),
+#         exploit_rating=sanitize(vuln.get("Exploit Rating")),
+#         mandi_ease=sanitize(vuln.get("Mandiant Ease of Attack")),
+#         exploit_consequence=sanitize(vuln.get("Exploit Consequence")),
+#         mitigation=sanitize(vuln.get("Mitigation")),
+#         zero_day=sanitize(vuln.get("Zero Day")),
+#         epss_score=sanitize(vuln.get("EPSS Score")),
+#         cisa_kev=sanitize(vuln.get("CISA KEV Vulnerability")),
+#     )
 
-    return get_issue_template().format_map(context)
+#     return get_issue_template().format_map(context)
 
 def render_issue_from_jira(jira_issue_key: str, jira_summary: str, jira_description: str) -> str:
     """Render an improved, bug-focused issue body from Jira inputs.
