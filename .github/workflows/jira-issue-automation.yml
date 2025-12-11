@@ -1,0 +1,233 @@
+name: Create Vulnerability Issues
+
+on:
+  workflow_dispatch:
+    inputs:
+      jira_issue_key:
+        description: "Key of sub-defect created in Jira"
+        required: true
+      jira_summary:
+        description: "Summary of the issue"
+        required: false
+      jira_label:
+        description: "Label to add for issues/PRs"
+        required: false
+        default: "auto-issue"
+      jira_attachments:
+        description: 'Attachment URLs (format: name:url,name2:url2)'
+        required: false
+        type: string
+      jira_description:
+        description: 'description details'
+        required: false
+        type: string
+
+jobs:
+  create-issues:
+    runs-on: ubuntu-latest
+
+    permissions:
+      issues: write
+      contents: write
+      pull-requests: write
+
+    # Make GH_PAT_AGENT available to all steps in the job (must be set in repo secrets)
+    env:
+      GH_PAT_AGENT: ${{ secrets.GH_PAT_AGENT }}
+
+    steps:
+      - name: Show inputs
+        env:
+          GH_PAT_AGENT: ${{ secrets.GH_PAT_AGENT }}
+        run: |
+          echo "Issue Key: ${{ github.event.inputs.jira_issue_key }}"
+          echo "Summary: ${{ github.event.inputs.jira_summary }}"
+          echo "Attachments (manual list): ${{ github.event.inputs.jira_attachments }}"
+          echo "Description: ${{ github.event.inputs.jira_description }}"
+
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Ensure jq is installed (required for discovery)
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y jq
+          
+      - name: Parse attachments
+        id: parse_attachments
+        run: |
+          if [ -n "${{ github.event.inputs.jira_attachments }}" ]; then
+            echo "Parsing attachments..."
+            IFS=',' read -ra ATTACH_ARRAY <<< "${{ github.event.inputs.jira_attachments }}"
+            for ATTACH in "${ATTACH_ARRAY[@]}"; do
+              FILENAME=$(echo "$ATTACH" | cut -d':' -f1)
+              URL=$(echo "$ATTACH" | cut -d':' -f2-)
+              echo "Filename: $FILENAME"
+              echo "URL: $URL"
+            done
+          else
+            echo "No attachments provided."
+          fi
+          
+      - name: Discover + download Jira attachments (use Basic auth)
+        env:
+          JIRA_HOST: ${{ secrets.JIRA_HOST }}
+          JIRA_USERNAME: ${{ secrets.JIRA_USERNAME }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_ISSUE_KEY: ${{ github.event.inputs.jira_issue_key }}
+        run: |
+          set -euo pipefail
+          mkdir -p attachments
+
+          if [ -z "${JIRA_HOST:-}" ]; then echo "JIRA_HOST not set"; exit 1; fi
+          if [ -z "${JIRA_ISSUE_KEY:-}" ]; then echo "No issue key provided; skipping"; exit 0; fi
+
+          API_URL="$JIRA_HOST/rest/api/3/issue/$JIRA_ISSUE_KEY?fields=attachment"
+          echo "Calling: $API_URL"
+
+          RESP_FILE="$(mktemp)"
+          HTTP_CODE=$(curl -sS -w "%{http_code}" -u "${JIRA_USERNAME}:${JIRA_API_TOKEN}" -o "$RESP_FILE" "$API_URL") || CURL_E=$?
+
+          if [ -z "${HTTP_CODE:-}" ] || [ "${HTTP_CODE}" -lt 100 ]; then
+            echo "curl network/DNS error. exit ${CURL_E:-unknown}"
+            head -c 800 "$RESP_FILE" || true; rm -f "$RESP_FILE"; exit 1
+          fi
+
+          echo "HTTP status: $HTTP_CODE"
+          if [ "$HTTP_CODE" -ne 200 ]; then
+            echo "Failed to fetch attachments JSON (HTTP $HTTP_CODE). Response snippet:"
+            head -c 2000 "$RESP_FILE" || true
+            rm -f "$RESP_FILE"
+            exit 1
+          fi
+
+          jq -r '.fields.attachment[]? | "\(.filename) \(.content)"' "$RESP_FILE" | while read -r filename url; do
+            echo "Downloading $filename from $url"
+            if curl -sS -L -u "${JIRA_USERNAME}:${JIRA_API_TOKEN}" --fail -o "attachments/$filename" "$url"; then
+              echo "Saved attachments/$filename"
+            else
+              echo "Failed to download $url"
+              rm -f "attachments/$filename" || true
+            fi
+          done
+
+          echo "Downloaded files:"; ls -la attachments || true
+          
+      - name: List downloaded files
+        run: ls -la attachments/ || true
+
+      - name: Use image context in code
+        run: |
+          echo "Image downloaded: attachments/*"
+          find attachments -type f -maxdepth 3 -print || true
+
+      - name: Ensure attachments branch exists (via git)
+        env:
+          GH_PAT_AGENT: ${{ secrets.GH_PAT_AGENT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          ATTACHMENTS_BRANCH: attachments
+        run: |
+          set -euo pipefail
+          BRANCH="${ATTACHMENTS_BRANCH}"
+          REPO="${GITHUB_REPOSITORY}"
+      
+          # Ensure .git exists (actions/checkout must have run)
+          if [ ! -d ".git" ]; then
+            echo ".git not found; ensure actions/checkout ran earlier"
+            exit 1
+          fi
+      
+          # Use tokenized remote to allow push
+          git remote set-url origin "https://x-access-token:${GH_PAT_AGENT}@github.com/${REPO}.git"
+          git fetch origin --prune
+      
+          if git ls-remote --exit-code --heads origin "${BRANCH}" >/dev/null 2>&1; then
+            echo "Branch ${BRANCH} exists on origin; nothing to do"
+          else
+            # create local branch from default branch and push
+            DEFAULT=$(git remote show origin | sed -n 's/.*HEAD branch: //p' || true)
+            if [ -z "$DEFAULT" ]; then
+              # fallback to API to learn default branch
+              DEFAULT=$(curl -s -H "Authorization: token ${GH_PAT_AGENT}" "https://api.github.com/repos/${REPO}" | jq -r .default_branch)
+            fi
+            echo "Creating ${BRANCH} from ${DEFAULT}"
+            git fetch origin "${DEFAULT}"
+            git checkout -b "${BRANCH}" "origin/${DEFAULT}"
+            git push -u origin "${BRANCH}"
+          fi
+      # - name: Ensure attachments branch exists (fallback)
+      #   # create the attachments branch from default branch if files exist and branch missing
+      #   run: |
+      #     set -euo pipefail
+      #     BRANCH="issue-attachments/${{ github.event.inputs.jira_issue_key }}"
+      #     REPO="${{ github.repository }}"
+      #     # only run if attachments dir contains files
+      #     if [ -z "$(ls -A attachments 2>/dev/null || true)" ]; then
+      #       echo "No local attachments found; skipping branch creation."
+      #       exit 0
+      #     fi
+      #     echo "Attachments found — ensuring branch $BRANCH exists"
+      #     DEFAULT=$(curl -s -H "Authorization: token $GH_PAT_AGENT" "https://api.github.com/repos/$REPO" | jq -r .default_branch)
+      #     BASE_SHA=$(curl -s -H "Authorization: token $GH_PAT_AGENT" "https://api.github.com/repos/$REPO/git/refs/heads/$DEFAULT" | jq -r .object.sha)
+      #     CODE=$(curl -s -o /dev/null -w "%{http_code}" -H "Authorization: token $GH_PAT_AGENT" "https://api.github.com/repos/$REPO/git/refs/heads/$BRANCH")
+      #     if [ "$CODE" = "404" ]; then
+      #       echo "Creating branch $BRANCH from $DEFAULT ($BASE_SHA)"
+      #       curl -s -X POST -H "Authorization: token $GH_PAT_AGENT" -H "Content-Type: application/json" \
+      #         "https://api.github.com/repos/$REPO/git/refs" \
+      #         -d "{\"ref\":\"refs/heads/$BRANCH\",\"sha\":\"$BASE_SHA\"}" | jq .
+      #     else
+      #       echo "Branch $BRANCH exists (HTTP $CODE)"
+      #     fi
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Authenticate GitHub CLI
+        run: |
+          echo "${{ secrets.GH_PAT_AGENT }}" | gh auth login --with-token
+
+      - name: Create GitHub issue from Jira inputs
+        env:
+          GH_PAT_AGENT: ${{ secrets.GH_PAT_AGENT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          ASSIGNEES: "copilot-swe-agent"
+          JIRA_ISSUE_KEY: ${{ github.event.inputs.jira_issue_key }}
+          JIRA_SUMMARY: ${{ github.event.inputs.jira_summary }}
+          JIRA_ATTACHMENTS: ${{ github.event.inputs.jira_attachments }}
+          JIRA_DESCRIPTION: ${{ github.event.inputs.jira_description }}
+          CVSS_SCORE: ${{ github.event.inputs.cvss_score }}
+          FINDING_TYPE: ${{ github.event.inputs.finding_type }}
+          DRY_RUN: ${{ github.event.inputs.dry_run }}
+          LABEL: ${{ github.event.inputs.label }}
+        run: |
+          python main.py --from-jira
+
+      # - name: Upload attachments to attachments branch and post comment (Python)
+      #   env:
+      #     GITHUB_REPOSITORY: ${{ github.repository }}
+      #     GH_PAT_AGENT: ${{ secrets.GH_PAT_AGENT }}
+      #     JIRA_ISSUE_KEY: ${{ github.event.inputs.jira_issue_key }}
+      #     ISSUE_NUMBER: ${{ steps.read_issue.outputs.issue_number }}
+      #     ATTACHMENTS_DIR: attachments
+      #     ATTACHMENTS_BRANCH: attachments
+      #   run: |
+      #     python scripts/upload_attachments_to_branch_and_comment.py
+          
+      - name: Summary
+        run: |
+          echo "### Vulnerability Issue Created! 🎫" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Jira Issue:** ${{ github.event.inputs.jira_issue_key }}" >> $GITHUB_STEP_SUMMARY
+          echo "**Summary:** ${{ github.event.inputs.jira_summary }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Check the [Issues tab](https://github.com/${{ github.repository }}/issues?q=is%3Aissue+is%3Aopen+label%3Avulnerability) to see the created vulnerability issue." >> $GITHUB_STEP_SUMMARY
