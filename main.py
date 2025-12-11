@@ -10,7 +10,7 @@ import json
 from dotenv import load_dotenv
 from github import Github
 from github.GithubException import GithubException
-from issue_creator.issue_renderer import render_issue, render_issue_from_jira
+from issue_creator.issue_renderer import render_issue_from_jira
 from issue_creator.github_client import build_issue_labels, create_issue_with_gh
 
 # Use a single attachments branch for all issues; each issue will have its own folder under attachments/
