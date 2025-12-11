@@ -14,7 +14,7 @@ def get_issue_template() -> str:
 def render_issue_from_jira(jira_issue_key: str, jira_summary: str, jira_description: str) -> str:
     """Render an improved, bug-focused issue body from Jira inputs.
 
-    This function now requires the external template file at:
+    This function requires the external template file at:
       issue_creator/templates/jira_issue_prompt.md
 
     The template is loaded and formatted with the sanitized inputs. If the file is
