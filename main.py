@@ -324,7 +324,7 @@ def create_issue_from_jira():
     
     # Default label for vulnerability
     # assignees = ["hrutvipujar-sudo"] 
-    labels = ["jira-issue"]
+    labels = ["jira-auto-fix"]
     
     body = render_issue_from_jira(
         jira_issue_key=jira_issue_key,
