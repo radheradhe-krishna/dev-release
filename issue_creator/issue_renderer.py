@@ -112,7 +112,8 @@ Follow these steps precisely:
 6. Add tests that reproduce the bug and verify the fix. Keep tests small and deterministic.
 7. Run unit tests and CI checks; include test results in the PR description.
 8. Keep inline comments minimal—only when necessary to clarify intent or non-obvious code.
-9. Create a branch as described above, open a PR referencing the Jira key, and in the PR description include:
+9. Do NOT modify .gitignore.
+10. Create a branch as described above, open a PR referencing the Jira key, and in the PR description include:
    - Files changed
    - Tests added
    - How to validate locally (commands and sample inputs)
