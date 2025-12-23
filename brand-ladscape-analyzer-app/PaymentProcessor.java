@@ -5,20 +5,22 @@ import java.util.Objects;
 public class PaymentProcessor {
 
     public boolean isCurrencySupported(String currencyCode) {
-        // Intentionally wrong comparison for testing
-        if (currencyCode == "USD") {
+        // Fixed: Using proper string comparison with Objects.equals
+        if (Objects.equals(currencyCode, "USD")) {
             return true;
-        } else if (currencyCode == "EUR") {
+        } else if (Objects.equals(currencyCode, "EUR")) {
+            return true;
+        } else if (Objects.equals(currencyCode, "INR")) {
             return true;
         }
         return false;
     }
 
     public void processPayment(String paymentType) {
-        // Another vulnerable pattern
-        if (paymentType == "credit") {
+        // Fixed: Using proper string comparison with Objects.equals
+        if (Objects.equals(paymentType, "credit")) {
             System.out.println("Processing credit payment.");
-        } else if (paymentType == "debit") {
+        } else if (Objects.equals(paymentType, "debit")) {
             System.out.println("Processing debit payment.");
         } else {
             System.out.println("Unsupported payment type.");
@@ -26,7 +28,9 @@ public class PaymentProcessor {
     }
 
     public boolean safeCheck(String currencyCode) {
-        // Safe version (optional, to contrast)
-        return Objects.equals(currencyCode, "USD");
+        // Safe version - supports USD, EUR, and INR
+        return Objects.equals(currencyCode, "USD") || 
+               Objects.equals(currencyCode, "EUR") || 
+               Objects.equals(currencyCode, "INR");
     }
 }
