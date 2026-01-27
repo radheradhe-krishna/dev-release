@@ -310,6 +310,8 @@ def create_issue_from_jira():
     
     token = os.getenv("GH_PAT_AGENT")
     repo_name = os.getenv("GITHUB_REPOSITORY")
+    print("GH_PAT_AGENT environment variable value "+ token)
+    print("GITHUB_REPOSITORY environment variable value "+ repo_name)
     
     if not token:
         print("Error: GH_PAT_AGENT environment variable not set")
