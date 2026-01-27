@@ -285,7 +285,7 @@ def create_issue_from_jira():
     load_dotenv()
     
     jira_issue_key = os.getenv("JIRA_ISSUE_KEY")
-    jira_summary = os.getenv("JIRA_SUMMARY")
+    jira_summary = os.getenv("JIRA_SUMMARY", "")
     jira_attachments = os.getenv("JIRA_ATTACHMENTS", "")
     jira_description = os.getenv("JIRA_DESCRIPTION", "")
     dry_run = os.getenv("DRY_RUN", "false").lower() == "true"
@@ -294,11 +294,12 @@ def create_issue_from_jira():
     if not jira_issue_key:
         print("Error: JIRA_ISSUE_KEY environment variable not set")
         sys.exit(1)
-    if not jira_summary:
-        print("Error: JIRA_SUMMARY environment variable not set")
-        sys.exit(1)
     
-    title = f"{jira_summary} - {jira_issue_key}"
+    # Use jira_summary if provided, otherwise use a default title
+    if jira_summary:
+        title = f"{jira_summary} - {jira_issue_key}"
+    else:
+        title = f"Issue {jira_issue_key}"
     
     if dry_run:
         print("\n=== DRY RUN MODE ===")
