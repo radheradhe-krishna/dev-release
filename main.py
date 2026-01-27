@@ -296,10 +296,7 @@ def create_issue_from_jira():
         sys.exit(1)
     
     # Use jira_summary if provided, otherwise use a default title
-    if jira_summary:
-        title = f"{jira_summary} - {jira_issue_key}"
-    else:
-        title = f"Issue {jira_issue_key}"
+    title = f"{jira_summary} - {jira_issue_key}" if jira_summary else f"Issue {jira_issue_key}"
     
     if dry_run:
         print("\n=== DRY RUN MODE ===")
