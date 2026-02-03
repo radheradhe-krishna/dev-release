@@ -17,8 +17,13 @@ from pathlib import Path
 from urllib.parse import quote
 import time
 
+# Add parent directory to path to import from issue_creator
+sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
+
 # Import the issue body generator
-from issue_generator import IssueBodyGenerator, create_issue_with_gh
+from issue_generator import IssueBodyGenerator
+# Import the correct github client that doesn't strip assignees
+from issue_creator.github_client import create_issue_with_gh
 
 # Configuration from GitHub Secrets
 CONFIG = {
