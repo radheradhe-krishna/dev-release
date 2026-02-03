@@ -187,6 +187,28 @@
         const errorMessage = document.getElementById('errorMessage');
         const resultSection = document.getElementById('resultSection');
         const resultText = document.getElementById('resultText');
+        
+        // Store timeout ID to prevent overlapping error dismissals
+        let errorTimeoutId = null;
+
+        // Reusable function to show error with proper timeout management
+        function showError() {
+            // Clear any existing timeout to prevent race conditions
+            if (errorTimeoutId) {
+                clearTimeout(errorTimeoutId);
+            }
+            
+            // Show error styling and message
+            searchBox.classList.add('error');
+            errorMessage.classList.add('show');
+            
+            // Hide error after 2 seconds
+            errorTimeoutId = setTimeout(() => {
+                errorMessage.classList.remove('show');
+                searchBox.classList.remove('error');
+                errorTimeoutId = null;
+            }, 2000);
+        }
 
         // Prevent numeric input in real-time
         searchBox.addEventListener('input', function(e) {
@@ -196,16 +218,7 @@
             if (/\d/.test(value)) {
                 // Remove numeric characters from the input
                 e.target.value = value.replace(/\d/g, '');
-                
-                // Show error styling and message
-                e.target.classList.add('error');
-                errorMessage.classList.add('show');
-                
-                // Hide error after 2 seconds
-                setTimeout(() => {
-                    errorMessage.classList.remove('show');
-                    e.target.classList.remove('error');
-                }, 2000);
+                showError();
             } else {
                 // Remove error styling if no numbers present
                 e.target.classList.remove('error');
@@ -225,16 +238,7 @@
             // Block numeric keys (0-9)
             if (/\d/.test(e.key)) {
                 e.preventDefault();
-                
-                // Show error styling and message
-                e.target.classList.add('error');
-                errorMessage.classList.add('show');
-                
-                // Hide error after 2 seconds
-                setTimeout(() => {
-                    errorMessage.classList.remove('show');
-                    e.target.classList.remove('error');
-                }, 2000);
+                showError();
             }
         });
 
@@ -244,16 +248,7 @@
                 const value = e.target.value;
                 if (/\d/.test(value)) {
                     e.target.value = value.replace(/\d/g, '');
-                    
-                    // Show error styling and message
-                    e.target.classList.add('error');
-                    errorMessage.classList.add('show');
-                    
-                    // Hide error after 2 seconds
-                    setTimeout(() => {
-                        errorMessage.classList.remove('show');
-                        e.target.classList.remove('error');
-                    }, 2000);
+                    showError();
                 }
             }, 10);
         });
