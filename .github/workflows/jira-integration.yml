@@ -73,6 +73,7 @@ jobs:
           echo ""
 
       - name: 🐍 Process Jira Bug
+        id: create_issue
         env:
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
@@ -83,7 +84,24 @@ jobs:
           ASSIGNEES: "copilot-swe-agent"
           JIRA_BUG_KEY: ${{ github.event.client_payload.bug_key || github.event.inputs.bug_key }}
         run: |
-          python .github/scripts/process_jira_bug.py
+          python .github/scripts/process_jira_bug.py | tee output.log
+
+          # Extract issue number from output
+          ISSUE_NUM=$(grep -oP 'GitHub Issue:\s+#\K\d+' output.log || echo "")
+          if [ -n "$ISSUE_NUM" ]; then
+            echo "issue_number=$ISSUE_NUM" >> $GITHUB_OUTPUT
+            echo "✅ Captured issue number: #$ISSUE_NUM"
+          fi
+
+      - name: 🤖 Assign Copilot to Issue
+        if: steps.create_issue.outputs.issue_number != ''
+        run: |
+          ISSUE_NUMBER="${{ steps.create_issue.outputs.issue_number }}"
+          echo "Delegating issue #$ISSUE_NUMBER to Copilot..."
+
+          gh issue edit $ISSUE_NUMBER --add-assignee "copilot-swe-agent" || echo "⚠️  Assignment via CLI failed, but issue created successfully"
+
+          echo "✅ Issue #$ISSUE_NUMBER processed for Copilot delegation"
 
       - name: 📦 Upload Attachments as Backup
         if: always()
