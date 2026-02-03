@@ -1,0 +1,257 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Student Management App</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            padding: 20px;
+        }
+
+        .container {
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+            padding: 40px;
+            max-width: 600px;
+            width: 100%;
+        }
+
+        h1 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 28px;
+            text-align: center;
+        }
+
+        .subtitle {
+            color: #666;
+            text-align: center;
+            margin-bottom: 30px;
+            font-size: 14px;
+        }
+
+        .search-section {
+            margin-bottom: 30px;
+        }
+
+        label {
+            display: block;
+            color: #555;
+            font-weight: 600;
+            margin-bottom: 8px;
+            font-size: 14px;
+        }
+
+        .input-wrapper {
+            position: relative;
+        }
+
+        input[type="text"] {
+            width: 100%;
+            padding: 15px 45px 15px 15px;
+            border: 2px solid #e0e0e0;
+            border-radius: 10px;
+            font-size: 16px;
+            transition: all 0.3s ease;
+            outline: none;
+        }
+
+        input[type="text"]:focus {
+            border-color: #667eea;
+            box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+        }
+
+        input[type="text"].error {
+            border-color: #f44336;
+            background-color: #ffebee;
+        }
+
+        .search-icon {
+            position: absolute;
+            right: 15px;
+            top: 50%;
+            transform: translateY(-50%);
+            color: #999;
+            font-size: 20px;
+            pointer-events: none;
+        }
+
+        .error-message {
+            color: #f44336;
+            font-size: 12px;
+            margin-top: 5px;
+            display: none;
+            font-weight: 500;
+        }
+
+        .error-message.show {
+            display: block;
+        }
+
+        .info-box {
+            background: #e3f2fd;
+            border-left: 4px solid #2196F3;
+            padding: 15px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .info-box h3 {
+            color: #1976D2;
+            margin-bottom: 8px;
+            font-size: 16px;
+        }
+
+        .info-box p {
+            color: #555;
+            font-size: 14px;
+            line-height: 1.6;
+        }
+
+        .result-section {
+            margin-top: 30px;
+            padding: 20px;
+            background: #f5f5f5;
+            border-radius: 10px;
+            min-height: 100px;
+            display: none;
+        }
+
+        .result-section.show {
+            display: block;
+        }
+
+        .result-section h3 {
+            color: #333;
+            margin-bottom: 10px;
+            font-size: 18px;
+        }
+
+        .result-text {
+            color: #666;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Student Management System</h1>
+        <p class="subtitle">Search for students by name</p>
+
+        <div class="search-section">
+            <label for="searchBox">Search Student Name</label>
+            <div class="input-wrapper">
+                <input 
+                    type="text" 
+                    id="searchBox" 
+                    placeholder="Enter student name (letters only)..."
+                    autocomplete="off"
+                >
+                <span class="search-icon">🔍</span>
+            </div>
+            <div class="error-message" id="errorMessage">
+                ⚠️ Numbers are not allowed. Please enter letters only.
+            </div>
+        </div>
+
+        <div class="info-box">
+            <h3>ℹ️ Search Guidelines</h3>
+            <p>
+                <strong>Validation Rule:</strong> The search box only accepts alphabetic characters (letters) and spaces. 
+                Numeric characters (0-9) are automatically blocked to ensure accurate name-based searches.
+            </p>
+        </div>
+
+        <div class="result-section" id="resultSection">
+            <h3>Search Results</h3>
+            <p class="result-text" id="resultText"></p>
+        </div>
+    </div>
+
+    <script>
+        const searchBox = document.getElementById('searchBox');
+        const errorMessage = document.getElementById('errorMessage');
+        const resultSection = document.getElementById('resultSection');
+        const resultText = document.getElementById('resultText');
+        
+        // Store timeout ID to prevent overlapping error dismissals
+        let errorTimeoutId = null;
+
+        // Reusable function to show error with proper timeout management
+        function showError() {
+            // Clear any existing timeout to prevent race conditions
+            if (errorTimeoutId) {
+                clearTimeout(errorTimeoutId);
+            }
+            
+            // Show error styling and message
+            searchBox.classList.add('error');
+            errorMessage.classList.add('show');
+            
+            // Hide error after 2 seconds
+            errorTimeoutId = setTimeout(() => {
+                errorMessage.classList.remove('show');
+                searchBox.classList.remove('error');
+                errorTimeoutId = null;
+            }, 2000);
+        }
+
+        // Prevent numeric input in real-time
+        searchBox.addEventListener('input', function(e) {
+            const value = e.target.value;
+            
+            // Check if the input contains any numeric characters
+            if (/\d/.test(value)) {
+                // Remove numeric characters from the input
+                e.target.value = value.replace(/\d/g, '');
+                showError();
+            } else {
+                // Remove error styling if no numbers present
+                e.target.classList.remove('error');
+            }
+            
+            // Show results if there's valid input
+            if (e.target.value.trim().length > 0) {
+                resultSection.classList.add('show');
+                resultText.textContent = `Searching for: "${e.target.value}"`;
+            } else {
+                resultSection.classList.remove('show');
+            }
+        });
+
+        // Additional prevention on keypress
+        searchBox.addEventListener('keypress', function(e) {
+            // Block numeric keys (0-9)
+            if (/\d/.test(e.key)) {
+                e.preventDefault();
+                showError();
+            }
+        });
+
+        // Prevent paste of numeric content
+        searchBox.addEventListener('paste', function(e) {
+            setTimeout(() => {
+                const value = e.target.value;
+                if (/\d/.test(value)) {
+                    e.target.value = value.replace(/\d/g, '');
+                    showError();
+                }
+            }, 10);
+        });
+    </script>
+</body>
+</html>
