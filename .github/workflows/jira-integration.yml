@@ -1,0 +1,111 @@
+name: Jira to GitHub Integration (Zero-Cost)
+permissions:
+  issues: write
+  contents: write
+on:
+  repository_dispatch:
+    types: 
+      - jira-bug-created
+      - jira-label-added
+      - jira-label-changed
+  
+  workflow_dispatch:
+    inputs:
+      bug_key:
+        description: 'Jira Bug Key (e.g., BUG-123)'
+        required: true
+        type: string
+
+concurrency:
+  group: jira-bug-${{ github.event.client_payload.bug_key || github.event.inputs.bug_key }}
+  cancel-in-progress: false
+
+jobs:
+  process-jira-bug:
+    name: Process Jira Bug
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+
+    permissions:
+      issues: write
+      contents: write
+      pull-requests: write
+      
+    env:
+      GH_PAT_AGENT: ${{ secrets.GH_PAT_AGENT }}
+      ASSIGNEES: "copilot-swe-agent"
+    
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+      
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+          cache: 'pip'
+          
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          python -m pip install -r requirements.txt
+
+      - name: Authenticate GitHub CLI
+        run: |
+          echo "${{ secrets.GH_PAT_AGENT }}" | gh auth login --with-token
+          
+      - name: 📋 Display Bug Information
+        run: |
+          echo "╔════════════════════════════════════════════════════════╗"
+          echo "║         JIRA BUG RECEIVED (ZERO-COST METHOD)          ║"
+          echo "╚════════════════════════════════════════════════════════╝"
+          echo ""
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            echo "Trigger:     Jira Automation (${{ github.event.action }})"
+            echo "Bug Key:     ${{ github.event.client_payload.bug_key }}"
+            echo "Summary:     ${{ github.event.client_payload.summary }}"
+            echo "Priority:    ${{ github.event.client_payload.priority }}"
+            echo "Labels:      ${{ github.event.client_payload.labels }}"
+          else
+            echo "Trigger:     Manual Test"
+            echo "Bug Key:     ${{ github.event.inputs.bug_key }}"
+          fi
+          echo ""
+      
+      - name: 🐍 Process Jira Bug
+        env:
+          JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
+          JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
+          JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          JIRA_BUG_KEY: ${{ github.event.client_payload.bug_key || github.event.inputs.bug_key }}
+        run: |
+          python .github/scripts/process_jira_bug.py
+      
+      - name: 📦 Upload Attachments as Backup
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: jira-attachments-${{ github.event.client_payload.bug_key || github.event.inputs.bug_key }}
+          path: attachments/
+          retention-days: 30
+          if-no-files-found: ignore
+      
+      - name: 📊 Create Job Summary
+        if: always()
+        run: |
+          echo "# 🐍 Jira to GitHub Integration Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## Bug Information" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Bug Key:** \`${{ github.event.client_payload.bug_key || github.event.inputs.bug_key }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "- **Trigger:** ${{ github.event_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **Timestamp:** $(date -u +"%Y-%m-%d %H:%M:%S UTC")" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "## 💰 Cost Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Monthly Cost:** \$0.00 ✅" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          echo "✨ *Running on free GitHub Actions tier*" >> $GITHUB_STEP_SUMMARY
+
