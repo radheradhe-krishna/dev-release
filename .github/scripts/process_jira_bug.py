@@ -298,14 +298,10 @@ class JiraGitHubProcessor:
         
         gh, repo = self.ensure_repo(token, repo_name)
         
-        # Read assignees from environment variable (set in workflow)
-        assignees_env = os.getenv("ASSIGNEES", "").strip()
-        assignees = [part.strip() for part in assignees_env.split(",") if part.strip()]
-        
-        if assignees:
-            print(f"Will attempt to assign issue to: {assignees}")
-        else:
-            print("No assignees specified in ASSIGNEES environment variable")
+        # Don't pass assignees during creation - will be assigned via GitHub Actions workflow step
+        # This avoids the "user not found" error that prevents issue creation
+        assignees = []
+        print("Note: Assignees will be set via GitHub Actions workflow after issue creation")
     
         labels = ["jira-auto-fix"]
         # Create the issue (pass repo to get an Issue object when possible)
