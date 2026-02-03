@@ -4,15 +4,15 @@ permissions:
   contents: write
 on:
   repository_dispatch:
-    types: 
+    types:
       - jira-bug-created
       - jira-label-added
       - jira-label-changed
-  
+
   workflow_dispatch:
     inputs:
       bug_key:
-        description: 'Jira Bug Key (e.g., BUG-123)'
+        description: "Jira Bug Key (e.g., BUG-123)"
         required: true
         type: string
 
@@ -30,21 +30,21 @@ jobs:
       issues: write
       contents: write
       pull-requests: write
-      
+
     env:
       GH_PAT_AGENT: ${{ secrets.GH_PAT_AGENT }}
       ASSIGNEES: "copilot-swe-agent"
-    
+
     steps:
       - name: Checkout Repository
         uses: actions/checkout@v4
-      
+
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
-          python-version: '3.11'
-          cache: 'pip'
-          
+          python-version: "3.11"
+          cache: "pip"
+
       - name: Install dependencies
         run: |
           python -m pip install --upgrade pip
@@ -53,7 +53,7 @@ jobs:
       - name: Authenticate GitHub CLI
         run: |
           echo "${{ secrets.GH_PAT_AGENT }}" | gh auth login --with-token
-          
+
       - name: 📋 Display Bug Information
         run: |
           echo "╔════════════════════════════════════════════════════════╗"
@@ -71,17 +71,20 @@ jobs:
             echo "Bug Key:     ${{ github.event.inputs.bug_key }}"
           fi
           echo ""
-      
+
       - name: 🐍 Process Jira Bug
         env:
           JIRA_EMAIL: ${{ secrets.JIRA_EMAIL }}
           JIRA_API_TOKEN: ${{ secrets.JIRA_API_TOKEN }}
           JIRA_BASE_URL: ${{ secrets.JIRA_BASE_URL }}
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_PAT_AGENT: ${{ secrets.GH_PAT_AGENT }}
+          GITHUB_REPOSITORY: ${{ github.repository }}
+          ASSIGNEES: "copilot-swe-agent"
           JIRA_BUG_KEY: ${{ github.event.client_payload.bug_key || github.event.inputs.bug_key }}
         run: |
           python .github/scripts/process_jira_bug.py
-      
+
       - name: 📦 Upload Attachments as Backup
         if: always()
         uses: actions/upload-artifact@v4
@@ -90,7 +93,7 @@ jobs:
           path: attachments/
           retention-days: 30
           if-no-files-found: ignore
-      
+
       - name: 📊 Create Job Summary
         if: always()
         run: |
@@ -108,4 +111,3 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
 
           echo "✨ *Running on free GitHub Actions tier*" >> $GITHUB_STEP_SUMMARY
-
