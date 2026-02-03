@@ -293,9 +293,14 @@ class JiraGitHubProcessor:
         
         gh, repo = self.ensure_repo(token, repo_name)
         
-        # Don't assign programmatically - Copilot will be assigned by GitHub Actions workflow
-        # or manually from the UI after issue is created
-        assignees = []  # Empty - let GitHub Actions handle assignment
+        # Read assignees from environment variable (set in workflow)
+        assignees_env = os.getenv("ASSIGNEES", "").strip()
+        assignees = [part.strip() for part in assignees_env.split(",") if part.strip()]
+        
+        if assignees:
+            print(f"Will attempt to assign issue to: {assignees}")
+        else:
+            print("No assignees specified in ASSIGNEES environment variable")
     
         labels = ["jira-auto-fix"]
         # Create the issue (pass repo to get an Issue object when possible)
