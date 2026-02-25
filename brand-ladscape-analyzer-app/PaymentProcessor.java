@@ -10,6 +10,8 @@ public class PaymentProcessor {
             return true;
         } else if (currencyCode == "EUR") {
             return true;
+        } else if (currencyCode == "INR") {
+            return true;
         }
         return false;
     }
@@ -27,6 +29,6 @@ public class PaymentProcessor {
 
     public boolean safeCheck(String currencyCode) {
         // Safe version (optional, to contrast)
-        return Objects.equals(currencyCode, "USD");
+        return Objects.equals(currencyCode, "USD") || Objects.equals(currencyCode, "EUR") || Objects.equals(currencyCode, "INR");
     }
 }
