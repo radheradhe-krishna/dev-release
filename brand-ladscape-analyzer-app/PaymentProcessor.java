@@ -10,6 +10,8 @@ public class PaymentProcessor {
             return true;
         } else if (currencyCode == "EUR") {
             return true;
+        } else if (currencyCode == "INR") {
+            return true;
         }
         return false;
     }
