@@ -15,7 +15,7 @@
           U
         </div>
         <div>
-          <h1 style="margin:0;font-size:18px;letter-spacing:0.2px;">Jira Issue — User Details</h1>
+          <h1 style="margin:0;font-size:18px;letter-spacing:0.2px;color:red;">Jira Issue — User Details</h1>
           <div id="meta" style="font-size:12px;opacity:0.95;margin-top:3px;">
             Issue: <strong id="jira-key">PROJ-123</strong> • Created: <span id="jira-date">2025-12-10</span>
           </div>
@@ -32,7 +32,7 @@
   <main role="main" style="max-width:1100px;margin:28px auto;padding:0 20px;">
     <!-- Issue summary -->
     <section style="background:#fff;border-radius:10px;padding:16px;margin-bottom:18px;box-shadow:0 6px 18px rgba(11,17,32,0.06);">
-      <h2 style="margin:0 0 8px 0;font-size:16px;">Summary</h2>
+      <h2 style="margin:0 0 8px 0;font-size:16px;color:red;">Summary</h2>
       <p id="summary-text" style="margin:0;color:#475569;font-size:14px;">
         Request to capture and review user details for the account associated with the reported activity. This includes profile info, roles, login activity, and attachments or evidence.
       </p>
@@ -40,7 +40,7 @@
 
     <!-- Table: User Profile -->
     <section aria-labelledby="profile" style="margin-bottom:16px;">
-      <h3 id="profile" style="margin:6px 0 10px 4px;font-size:15px;">User Profile</h3>
+      <h3 id="profile" style="margin:6px 0 10px 4px;font-size:15px;color:red;">User Profile</h3>
 
       <table role="table" style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 6px 18px rgba(11,17,32,0.04);">
         <tbody>
@@ -70,7 +70,7 @@
 
     <!-- Table: Account & Security -->
     <section aria-labelledby="account-security" style="margin-bottom:16px;">
-      <h3 id="account-security" style="margin:6px 0 10px 4px;font-size:15px;">Account & Security</h3>
+      <h3 id="account-security" style="margin:6px 0 10px 4px;font-size:15px;color:red;">Account & Security</h3>
 
       <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 6px 18px rgba(11,17,32,0.04);">
         <tbody>
@@ -96,7 +96,7 @@
 
     <!-- Table: Roles & Permissions -->
     <section aria-labelledby="roles" style="margin-bottom:16px;">
-      <h3 id="roles" style="margin:6px 0 10px 4px;font-size:15px;">Roles & Permissions</h3>
+      <h3 id="roles" style="margin:6px 0 10px 4px;font-size:15px;color:red;">Roles & Permissions</h3>
 
       <table style="width:100%;border-collapse:separate;border-spacing:0 8px;">
         <thead>
@@ -126,7 +126,7 @@
 
     <!-- Table: Recent Activity -->
     <section aria-labelledby="activity" style="margin-bottom:16px;">
-      <h3 id="activity" style="margin:6px 0 10px 4px;font-size:15px;">Recent Activity</h3>
+      <h3 id="activity" style="margin:6px 0 10px 4px;font-size:15px;color:red;">Recent Activity</h3>
 
       <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 6px 18px rgba(11,17,32,0.04);">
         <thead style="background:#fbfdff;">
@@ -156,7 +156,7 @@
 
     <!-- Table: Attachments / Evidence -->
     <section aria-labelledby="evidence" style="margin-bottom:22px;">
-      <h3 id="evidence" style="margin:6px 0 10px 4px;font-size:15px;">Attachments & Evidence</h3>
+      <h3 id="evidence" style="margin:6px 0 10px 4px;font-size:15px;color:red;">Attachments & Evidence</h3>
 
       <table style="width:100%;border-collapse:collapse;background:#fff;border-radius:8px;overflow:hidden;">
         <thead style="background:#fbfdff;">
@@ -172,13 +172,13 @@
             <td style="padding:12px 14px;border-bottom:1px solid #f1f4f8;">activity-log-20251209.csv</td>
             <td style="padding:12px 14px;border-bottom:1px solid #f1f4f8;">text/csv</td>
             <td style="padding:12px 14px;border-bottom:1px solid #f1f4f8;">2025-12-10</td>
-            <td style="padding:12px 14px;border-bottom:1px solid #f1f4f8;"><a href="#" style="color:#0b74de;text-decoration:none;">Download</a></td>
+            <td style="padding:12px 14px;border-bottom:1px solid #f1f4f8;"><a href="#" style="color:green;text-decoration:underline;">Download</a></td>
           </tr>
           <tr style="background:#fafbfd;">
             <td style="padding:12px 14px;">sso-screenshot.png</td>
             <td style="padding:12px 14px;">image/png</td>
             <td style="padding:12px 14px;">2025-12-10</td>
-            <td style="padding:12px 14px;"><a href="#" style="color:#0b74de;text-decoration:none;">View</a></td>
+            <td style="padding:12px 14px;"><a href="#" style="color:green;text-decoration:underline;">View</a></td>
           </tr>
         </tbody>
       </table>
@@ -194,7 +194,7 @@
       </div>
       <div style="display:flex;gap:10px;">
         <a href="#" style="background:#0b74de;color:#fff;padding:10px 14px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;">Create Jira Comment</a>
-        <a href="#" style="background:#eef3f8;color:#0b74de;padding:10px 14px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;">Request Audit</a>
+        <a href="#" style="background:#eef3f8;color:green;padding:10px 14px;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px;">Request Audit</a>
       </div>
     </section>
   </main>
@@ -204,9 +204,9 @@
     <div style="max-width:1100px;margin:0 auto;display:flex;flex-wrap:wrap;justify-content:space-between;gap:12px;align-items:center;">
       <div style="font-size:13px;">© 2025 Security & Identity Team.</div>
       <div style="display:flex;gap:12px;font-size:13px;">
-        <a href="#" style="color:#9fb6df;text-decoration:none;">Privacy</a>
-        <a href="#" style="color:#9fb6df;text-decoration:none;">Terms</a>
-        <a href="#" style="color:#9fb6df;text-decoration:none;">Contact</a>
+        <a href="#" style="color:green;text-decoration:underline;">Privacy</a>
+        <a href="#" style="color:green;text-decoration:underline;">Terms</a>
+        <a href="#" style="color:green;text-decoration:underline;">Contact</a>
       </div>
     </div>
   </footer>
